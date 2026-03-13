@@ -7,11 +7,9 @@
   <title>Kenyra IA</title>
   <link rel="icon" type="image/png" href="kenyraia.png">
 
-  <!-- KaTeX para renderizar fórmulas matemáticas -->
+  <!-- KaTeX SIN defer — debe estar disponible cuando md() ejecute -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
-    onload="window.__katexReady=true; if(window.__katexPending){window.__katexPending.forEach(el=>renderMath(el));window.__katexPending=[];}"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
@@ -69,7 +67,6 @@
     body{font-family:var(--font);background:var(--bg);color:var(--tx);display:flex;overflow:hidden;-webkit-font-smoothing:antialiased;transition:background .25s,color .25s}
     ::-webkit-scrollbar{width:4px}
     ::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px}
-
     .sidebar{width:var(--sw);min-width:var(--sw);background:var(--sb);display:flex;flex-direction:column;border-right:1px solid var(--bd);flex-shrink:0}
     .sb-top{padding:1rem;display:flex;flex-direction:column;gap:.75rem;border-bottom:1px solid var(--bd);flex-shrink:0}
     .brand{display:flex;align-items:center;gap:.65rem}
@@ -208,46 +205,28 @@
     .drw-ov.open{display:block}
     .drw-panel{position:fixed;top:0;left:0;bottom:0;width:280px;z-index:101;background:var(--sb);border-right:1px solid var(--bd);display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .25s ease}
     .drw-panel.open{transform:translateX(0)}
-
-    /* KaTeX display math */
-    .msg-body .katex-display{margin:.5rem 0;overflow-x:auto;overflow-y:hidden}
-    .msg-body .katex{font-size:1em}
-
+    /* KaTeX */
+    .msg-body .katex-display{margin:.6rem 0;overflow-x:auto;overflow-y:hidden;text-align:center}
+    .msg-body .katex{font-size:1em;color:var(--tx)}
     @media(max-width:680px){
-      .sidebar{display:none !important}
-      .topbar{display:none}
+      .sidebar{display:none !important}.topbar{display:none}
       .mob-bar{display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;border-bottom:1px solid var(--bd);flex-shrink:0;gap:.5rem}
       .mob-title{flex:1;text-align:center;font-size:.78rem;font-weight:600;color:var(--txm)}
       .mob-btn{width:36px;height:36px;border-radius:8px;background:var(--sur);border:1px solid var(--bd2);color:var(--txm);cursor:pointer;display:grid;place-items:center;flex-shrink:0}
-      .msg-row{padding:.5rem .75rem;gap:.5rem}
-      .msg-av{width:26px;height:26px;font-size:.6rem}
-      .msg-content{max-width:85%}
-      .msg-bubble{font-size:.875rem;padding:.5rem .85rem}
-      .msg-body{font-size:.875rem}
-      .msg-body h1{font-size:1rem}.msg-body h2{font-size:.95rem}.msg-body h3{font-size:.88rem}
-      .msg-body li{font-size:.84rem}
-      .code-block{margin:.5rem 0}
+      .msg-row{padding:.5rem .75rem;gap:.5rem}.msg-av{width:26px;height:26px;font-size:.6rem}
+      .msg-content{max-width:85%}.msg-bubble{font-size:.875rem;padding:.5rem .85rem}
+      .msg-body{font-size:.875rem}.msg-body h1{font-size:1rem}.msg-body h2{font-size:.95rem}.msg-body h3{font-size:.88rem}
+      .msg-body li{font-size:.84rem}.code-block{margin:.5rem 0}
       .code-block pre{font-size:.72rem;padding:.7rem .75rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
-      .code-hdr{padding:.35rem .75rem}
-      .code-hdr-btns{gap:.3rem}
-      .copy-btn,.dl-btn{font-size:.62rem;padding:.18rem .35rem}
-      .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-      .msg-body table{font-size:.78rem}
-      .msg-body th,.msg-body td{padding:.4rem .6rem}
-      .dl-card{max-width:100%;flex-wrap:wrap;gap:.5rem}
-      .dl-card-btn{font-size:.7rem;padding:.35rem .6rem}
-      .welcome{padding:2rem 1rem 1.5rem;gap:.85rem;min-height:auto}
-      .w-greet{font-size:1.4rem}
-      .w-sub{font-size:.82rem}
-      .input-area{padding:.5rem .65rem .65rem}
+      .code-hdr{padding:.35rem .75rem}.code-hdr-btns{gap:.3rem}.copy-btn,.dl-btn{font-size:.62rem;padding:.18rem .35rem}
+      .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.msg-body table{font-size:.78rem}
+      .msg-body th,.msg-body td{padding:.4rem .6rem}.dl-card{max-width:100%;flex-wrap:wrap;gap:.5rem}
+      .dl-card-btn{font-size:.7rem;padding:.35rem .6rem}.welcome{padding:2rem 1rem 1.5rem;gap:.85rem;min-height:auto}
+      .w-greet{font-size:1.4rem}.w-sub{font-size:.82rem}.input-area{padding:.5rem .65rem .65rem}
       .input-wrap{padding:.6rem .6rem .6rem .85rem;border-radius:12px}
-      textarea{font-size:16px;max-height:120px}
-      .attach-btn,.send-btn{width:36px;height:36px}
-      .input-foot{font-size:.6rem}
-      .attach-chip{font-size:.68rem;max-width:140px}
-      .drw-panel{width:285px}
-      .cfg-menu{left:.3rem;right:.3rem}
-      .msg-body blockquote{padding:.3rem .7rem;font-size:.84rem}
+      textarea{font-size:16px;max-height:120px}.attach-btn,.send-btn{width:36px;height:36px}
+      .input-foot{font-size:.6rem}.attach-chip{font-size:.68rem;max-width:140px}
+      .drw-panel{width:285px}.cfg-menu{left:.3rem;right:.3rem}.msg-body blockquote{padding:.3rem .7rem;font-size:.84rem}
     }
   </style>
 </head>
@@ -390,9 +369,7 @@ const SYS = `Eres Kenyra IA, un asistente de inteligencia artificial avanzado, s
 REGLAS DE FORMATO (siempre cumplirlas):
 - Responde siempre en español.
 - Usa Markdown para estructurar respuestas: **negrita**, *cursiva*, encabezados ##, listas con - o números.
-- Para errores o revisiones: usa listas numeradas con ❌ para errores y ✅ para correcciones. Ejemplo:
-  ❌ **Error:** descripción
-  ✅ **Corrección:** descripción
+- Para errores o revisiones: usa listas numeradas con ❌ para errores y ✅ para correcciones.
 - Para código: usa bloques de código con el lenguaje correcto (\`\`\`sql, \`\`\`js, etc.).
 - Usa tablas Markdown cuando compares múltiples elementos.
 - Estructura la respuesta con secciones claras usando ## o ### cuando la respuesta es larga.
@@ -408,23 +385,13 @@ Para archivos descargables:
 
 let chatId=null, loading=false, pendingFiles=[], pendingImages=[];
 
-// ─── KaTeX math renderer ───────────────────────────────────────────────────
-function renderMath(el) {
-  if (window.__katexReady && window.renderMathInElement) {
-    renderMathInElement(el, {
-      delimiters: [
-        { left: '\\[', right: '\\]', display: true },
-        { left: '\\(', right: '\\)', display: false },
-        { left: '$$', right: '$$', display: true },
-        { left: '$',  right: '$',  display: false }
-      ],
-      throwOnError: false,
-      errorColor: '#f87171'
-    });
-  } else {
-    // KaTeX not ready yet — queue it
-    window.__katexPending = window.__katexPending || [];
-    window.__katexPending.push(el);
+// ─── KaTeX helper — window.katex ya está disponible (sin defer) ───────────
+function renderKatex(latex, display) {
+  if (!window.katex) return (display ? '\\[' : '\\(') + latex + (display ? '\\]' : '\\)');
+  try {
+    return window.katex.renderToString(latex, { displayMode: display, throwOnError: false, output: 'html' });
+  } catch(e) {
+    return '<span style="color:#f87171">' + latex.replace(/</g,'&lt;') + '</span>';
   }
 }
 
@@ -435,7 +402,7 @@ function pickAv(name){
   const fem=['a','ia','na','la','ra','sa','ina','ita'];
   const isFem=fem.some(e=>n.endsWith(e));
   const arr=isFem?FEMALE_AV:MALE_AV;
-  let h=0; for(let i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))|0;
+  let h=0;for(let i=0;i<n.length;i++)h=(h*31+n.charCodeAt(i))|0;
   return arr[Math.abs(h)%arr.length];
 }
 let userAv='';
@@ -443,7 +410,7 @@ let userAv='';
 const FICONS={html:'🌐',htm:'🌐',tsx:'⚛️',ts:'📘',js:'📜',jsx:'⚛️',css:'🎨',json:'📋',md:'📝',txt:'📄',pdf:'📕',sql:'🗄️',doc:'📃',docx:'📃',xml:'📋',csv:'📊',py:'🐍',php:'🐘',java:'☕',cpp:'⚙️',c:'⚙️',go:'🐹',rs:'🦀',vue:'💚',svelte:'🧡',yaml:'⚙️',yml:'⚙️',sh:'💻',bat:'💻'};
 const DLABELS={pdf:'Descargar PDF',html:'Descargar HTML',htm:'Descargar HTML',sql:'Descargar SQL',php:'Descargar PHP',js:'Descargar JS',ts:'Descargar TS',tsx:'Descargar TSX',css:'Descargar CSS',json:'Descargar JSON',csv:'Descargar CSV',xml:'Descargar XML',txt:'Descargar TXT',md:'Descargar MD',py:'Descargar Python',java:'Descargar Java',cpp:'Descargar C++',go:'Descargar Go',sh:'Descargar Shell',bat:'Descargar BAT',doc:'Descargar DOC',docx:'Descargar DOCX'};
 function fIcon(n){return FICONS[(n.split('.').pop()||'').toLowerCase()]||'📎';}
-function fExt(n){return (n.split('.').pop()||'').toLowerCase();}
+function fExt(n){return(n.split('.').pop()||'').toLowerCase();}
 function fSize(b){return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';}
 function dlLbl(e){return DLABELS[e.toLowerCase()]||('Descargar '+e.toUpperCase());}
 function rdText(f){return new Promise((ok,fail)=>{const r=new FileReader();r.onload=e=>ok(e.target.result);r.onerror=fail;r.readAsText(f);});}
@@ -456,7 +423,7 @@ function dlBlob(content,filename,mime){
   setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},150);
 }
 function getMime(e){
-  return {html:'text/html',htm:'text/html',css:'text/css',js:'application/javascript',ts:'application/typescript',tsx:'application/typescript',json:'application/json',sql:'application/sql',csv:'text/csv',xml:'application/xml',md:'text/markdown',txt:'text/plain',py:'text/x-python',php:'text/x-php',java:'text/x-java',sh:'application/x-sh',bat:'application/x-bat'}[e]||'text/plain';
+  return{html:'text/html',htm:'text/html',css:'text/css',js:'application/javascript',ts:'application/typescript',tsx:'application/typescript',json:'application/json',sql:'application/sql',csv:'text/csv',xml:'application/xml',md:'text/markdown',txt:'text/plain',py:'text/x-python',php:'text/x-php',java:'text/x-java',sh:'application/x-sh',bat:'application/x-bat'}[e]||'text/plain';
 }
 
 window.generatePDF=function(raw,fname){
@@ -488,26 +455,18 @@ function mdHtml(raw){
 
 function updateImgStrip(){
   let s=document.getElementById('imgStrip');
-  if(!s){
-    s=document.createElement('div');s.id='imgStrip';
-    s.style.cssText='display:none;flex-wrap:wrap;gap:8px;padding:6px 0 4px;';
-    const as=document.getElementById('attachStrip');
-    as.parentNode.insertBefore(s,as);
-  }
+  if(!s){s=document.createElement('div');s.id='imgStrip';s.style.cssText='display:none;flex-wrap:wrap;gap:8px;padding:6px 0 4px;';const as=document.getElementById('attachStrip');as.parentNode.insertBefore(s,as);}
   s.innerHTML='';
   if(!pendingImages.length){s.style.display='none';return;}
   s.style.display='flex';
   pendingImages.forEach((img,i)=>{
-    const w=document.createElement('div');
-    w.style.cssText='position:relative;width:72px;height:72px;flex-shrink:0;border-radius:10px;overflow:hidden;border:1.5px solid var(--bd2);';
+    const w=document.createElement('div');w.style.cssText='position:relative;width:72px;height:72px;flex-shrink:0;border-radius:10px;overflow:hidden;border:1.5px solid var(--bd2);';
     const im=document.createElement('img');im.src=img.url;im.style.cssText='width:100%;height:100%;object-fit:cover;';
-    const b=document.createElement('button');b.textContent='×';
-    b.style.cssText='position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.75);border:none;color:#fff;cursor:pointer;font-size:12px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;';
+    const b=document.createElement('button');b.textContent='×';b.style.cssText='position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.75);border:none;color:#fff;cursor:pointer;font-size:12px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;';
     b.onclick=()=>{pendingImages.splice(i,1);updateImgStrip();};
     w.appendChild(im);w.appendChild(b);s.appendChild(w);
   });
 }
-
 function updateFileStrip(){
   const s=document.getElementById('attachStrip');s.innerHTML='';
   if(!pendingFiles.length){s.classList.remove('has-files');return;}
@@ -537,8 +496,7 @@ function fillAv(el,ph,name){if(!el)return;el.innerHTML=ph?'<img src="'+ph+'" sty
 window.__setUser=function(name,ph,em){
   ph=ph||'';em=em||'';userAv=pickAv(name);localStorage.setItem('smi_avatar',userAv);
   ['Dt','Dr'].forEach(s=>{
-    fillAv(document.getElementById('av'+s),ph,name);
-    fillAv(document.getElementById('cfgAv'+s),ph,name);
+    fillAv(document.getElementById('av'+s),ph,name);fillAv(document.getElementById('cfgAv'+s),ph,name);
     const nm=document.getElementById('nm'+s);if(nm)nm.textContent=name;
     const cn=document.getElementById('cfgNm'+s);if(cn)cn.textContent=name;
     const ce=document.getElementById('cfgEm'+s);if(ce)ce.textContent=em||'—';
@@ -580,20 +538,12 @@ function renderSB(){buildHist('histDt',false);buildHist('histDr',true);}
 function showWelcome(){
   chatId=null;
   const name=localStorage.getItem('smi_user_name')||'Usuario';
-  document.getElementById('messages').innerHTML=
-    '<div class="welcome">'
-    +'<div class="w-logo"><img src="kenyraia.png" alt="Kenyra IA" onerror="this.parentElement.innerHTML=\'<div style=&quot;font-size:2rem;&quot;>&#10024;</div>\'"></div>'
-    +'<h1 class="w-greet" id="wGreet">'+greet()+', '+name.split(' ')[0]+'</h1>'
-    +'<p class="w-sub">Soy <strong>Kenyra IA</strong>. ¿En qué puedo ayudarte hoy?<br>'
-    +'<span style="font-size:.78rem;opacity:.6">Adjunta archivos 📎, pega imágenes con Ctrl+V o pide archivos descargables.</span></p>'
-    +'</div>';
+  document.getElementById('messages').innerHTML='<div class="welcome"><div class="w-logo"><img src="kenyraia.png" alt="Kenyra IA" onerror="this.parentElement.innerHTML=\'<div style=&quot;font-size:2rem;&quot;>&#10024;</div>\'"></div><h1 class="w-greet" id="wGreet">'+greet()+', '+name.split(' ')[0]+'</h1><p class="w-sub">Soy <strong>Kenyra IA</strong>. ¿En qué puedo ayudarte hoy?<br><span style="font-size:.78rem;opacity:.6">Adjunta archivos 📎, pega imágenes con Ctrl+V o pide archivos descargables.</span></p></div>';
   renderSB();
 }
-
 function loadChat(id){
   const ch=getChat(id);if(!ch)return;
-  chatId=id;
-  const msgs=document.getElementById('messages');msgs.innerHTML='';
+  chatId=id;const msgs=document.getElementById('messages');msgs.innerHTML='';
   ch.messages.forEach(m=>addMsg(m.role,m.text,false));
   msgs.scrollTop=msgs.scrollHeight;renderSB();
 }
@@ -603,209 +553,104 @@ function addMsg(role,text,scroll){
   document.querySelector('.welcome')?.remove();
   const msgs=document.getElementById('messages');
   const isA=role==='agent';
-  const d=document.createElement('div');
-  d.className='msg-row '+(isA?'is-agent':'is-user');
+  const d=document.createElement('div');d.className='msg-row '+(isA?'is-agent':'is-user');
   const ph=localStorage.getItem('smi_user_photo');
   const av=localStorage.getItem('smi_avatar')||pickAv(localStorage.getItem('smi_user_name')||'');
-  const avHtml=isA
-    ?'<img src="kenyraia.png" alt="K" onerror="this.outerHTML=\'K\'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
-    :(ph?'<img src="'+ph+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">':'<span style="font-size:1rem;line-height:1">'+av+'</span>');
+  const avHtml=isA?'<img src="kenyraia.png" alt="K" onerror="this.outerHTML=\'K\'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">':(ph?'<img src="'+ph+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">':'<span style="font-size:1rem;line-height:1">'+av+'</span>');
   if(isA){
-    d.innerHTML='<div class="msg-av agent">'+avHtml+'</div>'
-      +'<div class="msg-content"><div class="msg-name is-agent">Kenyra IA</div>'
-      +'<div class="msg-bubble"><div class="msg-body">'+md(text)+'</div></div></div>';
-  } else {
-    const IR=/\[IMG:([^\]]+)\]/g;
-    let m2,imgParts=[];
-    while((m2=IR.exec(text))!==null) imgParts.push(m2[1]);
+    d.innerHTML='<div class="msg-av agent">'+avHtml+'</div><div class="msg-content"><div class="msg-name is-agent">Kenyra IA</div><div class="msg-bubble"><div class="msg-body">'+md(text)+'</div></div></div>';
+  }else{
+    const IR=/\[IMG:([^\]]+)\]/g;let m2,imgParts=[];
+    while((m2=IR.exec(text))!==null)imgParts.push(m2[1]);
     const clean=text.replace(/\[IMG:[^\]]+\]/g,'').trim();
     let inner='<div class="msg-name"></div>';
-    if(imgParts.length){
-      inner+='<div class="user-imgs">';
-      imgParts.forEach(src=>{inner+='<img src="'+src+'" style="max-width:260px;max-height:200px;border-radius:12px;display:block;margin-bottom:4px;object-fit:cover;">';});
-      inner+='</div>';
-    }
-    if(clean) inner+='<div class="msg-bubble">'+esc(clean).replace(/\n/g,'<br>')+'</div>';
-    d.innerHTML='<div class="msg-av user">'+avHtml+'</div>'
-      +'<div class="msg-content" style="align-items:flex-end">'+inner+'</div>';
+    if(imgParts.length){inner+='<div class="user-imgs">';imgParts.forEach(src=>{inner+='<img src="'+src+'" style="max-width:260px;max-height:200px;border-radius:12px;display:block;margin-bottom:4px;object-fit:cover;">';});inner+='</div>';}
+    if(clean)inner+='<div class="msg-bubble">'+esc(clean).replace(/\n/g,'<br>')+'</div>';
+    d.innerHTML='<div class="msg-av user">'+avHtml+'</div><div class="msg-content" style="align-items:flex-end">'+inner+'</div>';
   }
   msgs.appendChild(d);
-  // Render KaTeX math inside this message
-  renderMath(d);
   if(scroll!==false)msgs.scrollTop=msgs.scrollHeight;
 }
 
 function showTyping(){
   const id='t'+Date.now();
-  document.getElementById('messages').insertAdjacentHTML('beforeend',
-    '<div class="msg-row is-agent" id="'+id+'"><div class="msg-av agent">'
-    +'<img src="kenyraia.png" alt="K" onerror="this.outerHTML=\'K\'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div>'
-    +'<div class="msg-content"><div class="msg-name is-agent">Kenyra IA</div>'
-    +'<div class="msg-bubble" style="background:var(--sur);border:1px solid var(--bd);border-radius:4px 18px 18px 18px;display:inline-block;padding:.6rem .95rem;">'
-    +'<div class="typing-dots"><span></span><span></span><span></span></div>'
-    +'</div></div></div>');
-  document.getElementById('messages').scrollTop=99999;
-  return id;
+  document.getElementById('messages').insertAdjacentHTML('beforeend','<div class="msg-row is-agent" id="'+id+'"><div class="msg-av agent"><img src="kenyraia.png" alt="K" onerror="this.outerHTML=\'K\'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"></div><div class="msg-content"><div class="msg-name is-agent">Kenyra IA</div><div class="msg-bubble" style="background:var(--sur);border:1px solid var(--bd);border-radius:4px 18px 18px 18px;display:inline-block;padding:.6rem .95rem;"><div class="typing-dots"><span></span><span></span><span></span></div></div></div></div>');
+  document.getElementById('messages').scrollTop=99999;return id;
 }
 function hideTyping(id){document.getElementById(id)?.remove();}
 
-// ─────────────────────────────────────────────
-// SEND MESSAGE
-// ─────────────────────────────────────────────
 async function sendMsg(){
   const inp=document.getElementById('chatInput');
-  const txt=inp.value.trim();
-  const files=pendingFiles.slice();
-  const imgs=pendingImages.slice();
+  const txt=inp.value.trim();const files=pendingFiles.slice();const imgs=pendingImages.slice();
   if((!txt&&!files.length&&!imgs.length)||loading)return;
-
-  inp.value='';inp.style.height='auto';
-  pendingFiles=[];updateFileStrip();
-  pendingImages=[];updateImgStrip();
-
+  inp.value='';inp.style.height='auto';pendingFiles=[];updateFileStrip();pendingImages=[];updateImgStrip();
   let disp=txt;
-  if(imgs.length){
-    const tags=imgs.map(i=>'[IMG:'+i.url+']').join('');
-    disp=tags+(txt?'\n'+txt:'');
-  }
-  if(files.length){
-    disp=(disp?disp+'\n':'')+files.map(f=>'📎 '+f.name).join('\n');
-  }
-
+  if(imgs.length){const tags=imgs.map(i=>'[IMG:'+i.url+']').join('');disp=tags+(txt?'\n'+txt:'');}
+  if(files.length){disp=(disp?disp+'\n':'')+files.map(f=>'📎 '+f.name).join('\n');}
   let histParts=[];
-  if(imgs.length) histParts.push('[imagen adjunta]');
-  if(files.length){
-    files.forEach(f=>{
-      histParts.push('📎 **'+f.name+'**\n```'+fExt(f.name)+'\n'+f.content.slice(0,6000)+'\n```');
-    });
-  }
-  if(txt) histParts.push(txt);
+  if(imgs.length)histParts.push('[imagen adjunta]');
+  if(files.length){files.forEach(f=>{histParts.push('📎 **'+f.name+'**\n```'+fExt(f.name)+'\n'+f.content.slice(0,6000)+'\n```');});}
+  if(txt)histParts.push(txt);
   const histStr=histParts.join('\n\n')||'(mensaje)';
-
   let apiContent=[];
-  imgs.forEach(i=>{
-    const parts=i.url.split(',');
-    const mediaType=(parts[0].match(/:(.*?);/)||[])[1]||'image/png';
-    const b64=parts[1]||'';
-    if(b64) apiContent.push({type:'image',source:{type:'base64',media_type:mediaType,data:b64}});
-  });
-
+  imgs.forEach(i=>{const parts=i.url.split(',');const mediaType=(parts[0].match(/:(.*?);/)||[])[1]||'image/png';const b64=parts[1]||'';if(b64)apiContent.push({type:'image',source:{type:'base64',media_type:mediaType,data:b64}});});
   let textParts=[];
-  if(files.length){
-    files.forEach(f=>{
-      textParts.push('📎 **'+f.name+'** ('+fSize(f.size)+')\n```'+fExt(f.name)+'\n'+f.content.slice(0,6000)+'\n```');
-    });
-  }
-  if(txt) textParts.push(txt);
-
+  if(files.length){files.forEach(f=>{textParts.push('📎 **'+f.name+'** ('+fSize(f.size)+')\n```'+fExt(f.name)+'\n'+f.content.slice(0,6000)+'\n```');});}
+  if(txt)textParts.push(txt);
   const textContent=textParts.join('\n\n')||(imgs.length?'¿Qué ves en esta imagen?':'(mensaje)');
   apiContent.push({type:'text',text:textContent});
-
-  const finalContent=(apiContent.length===1&&apiContent[0].type==='text')
-    ? apiContent[0].text
-    : apiContent;
-
-  if(!chatId){
-    chatId=newChatId(txt||(files[0]&&files[0].name)||(imgs.length?'Imagen':'Mensaje'));
-    renderSB();
-  }
+  const finalContent=(apiContent.length===1&&apiContent[0].type==='text')?apiContent[0].text:apiContent;
+  if(!chatId){chatId=newChatId(txt||(files[0]&&files[0].name)||(imgs.length?'Imagen':'Mensaje'));renderSB();}
   const ch=getChat(chatId);
-  ch.messages.push({role:'user',text:disp});
-  ch.history.push({role:'user',content:histStr});
-  saveChat(chatId,ch);
-  addMsg('user',disp);
-
-  loading=true;
-  document.getElementById('sendBtn').disabled=true;
-  const tid=showTyping();
-
+  ch.messages.push({role:'user',text:disp});ch.history.push({role:'user',content:histStr});saveChat(chatId,ch);addMsg('user',disp);
+  loading=true;document.getElementById('sendBtn').disabled=true;const tid=showTyping();
   try{
     const histForApi=ch.history.slice(0,-1).map(m=>({role:m.role,content:m.content}));
     const apiMessages=[...histForApi,{role:'user',content:finalContent}];
-
-    const res=await fetch(API,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({system:SYS,messages:apiMessages})
-    });
-
-    if(!res.ok){
-      let errMsg='HTTP '+res.status;
-      try{const e=await res.json();errMsg=e.error?.message||e.error||errMsg;}catch{}
-      throw new Error(errMsg);
-    }
-
+    const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:SYS,messages:apiMessages})});
+    if(!res.ok){let errMsg='HTTP '+res.status;try{const e=await res.json();errMsg=e.error?.message||e.error||errMsg;}catch{}throw new Error(errMsg);}
     const data=await res.json();
     const reply=(data.content&&data.content[0]&&data.content[0].text)||'Sin respuesta.';
-    hideTyping(tid);
-    ch.messages.push({role:'agent',text:reply});
-    ch.history.push({role:'assistant',content:reply});
-    saveChat(chatId,ch);
-    addMsg('agent',reply);
-  }catch(err){
-    hideTyping(tid);
-    addMsg('agent','⚠️ Error: '+err.message);
-  }
-
-  loading=false;
-  document.getElementById('sendBtn').disabled=false;
-  document.getElementById('chatInput').focus();
+    hideTyping(tid);ch.messages.push({role:'agent',text:reply});ch.history.push({role:'assistant',content:reply});saveChat(chatId,ch);addMsg('agent',reply);
+  }catch(err){hideTyping(tid);addMsg('agent','⚠️ Error: '+err.message);}
+  loading=false;document.getElementById('sendBtn').disabled=false;document.getElementById('chatInput').focus();
 }
 
 function resize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,150)+'px';}
 
-function renderKatexString(latex, display) {
-  try {
-    return katex.renderToString(latex, { displayMode: display, throwOnError: false });
-  } catch(e) {
-    return (display ? '\\[' : '\\(') + latex + (display ? '\\]' : '\\)');
-  }
-}
-
+// ─── md(): Markdown + LaTeX → HTML ───────────────────────────────────────
+// CLAVE: extraer bloques math ANTES del markdown, restaurar al final con KaTeX
 function md(raw){
   let t=raw;
-  const blocks=[];   // code blocks
-  const math=[];     // math blocks
+  const codes=[];   // bloques de código
+  const maths=[];   // bloques de matemáticas
 
-  // 1. Protect DOWNLOAD tags
+  // 1. Proteger descargas
   t=t.replace(/\[DOWNLOAD:([^\]]+)\]/g,(_,fn)=>'\x01DL:'+fn+'\x01');
 
-  // 2. Extract code blocks first (so math inside code is untouched)
+  // 2. Extraer código (protege math dentro de code)
   t=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,lang,code)=>{
-    lang=(lang||'code').trim();
-    const id='b'+Math.random().toString(36).slice(2,8);
-    blocks.push({id,lang,code:code.trim()});
-    return '\x00CODE'+(blocks.length-1)+'\x00';
+    lang=(lang||'code').trim();const id='b'+Math.random().toString(36).slice(2,8);
+    codes.push({id,lang,code:code.trim()});return '\x00C'+(codes.length-1)+'\x00';
   });
 
-  // 3. Extract math: \[...\] display, \(...\) inline, $$...$$ display, $...$ inline
-  //    Use placeholders \x02MATH_N\x02 so markdown can't touch them
-  t=t.replace(/\$\$([\s\S]+?)\$\$/g,(_,latex)=>{
-    math.push({latex:latex.trim(),display:true});
-    return '\x02MATH'+(math.length-1)+'\x02';
-  });
-  t=t.replace(/\\\[([\s\S]+?)\\\]/g,(_,latex)=>{
-    math.push({latex:latex.trim(),display:true});
-    return '\x02MATH'+(math.length-1)+'\x02';
-  });
-  t=t.replace(/\\\((.+?)\\\)/g,(_,latex)=>{
-    math.push({latex:latex.trim(),display:false});
-    return '\x02MATH'+(math.length-1)+'\x02';
-  });
-  t=t.replace(/(?<![\\$])\$(?!\$)(.+?)(?<![\\$])\$(?!\$)/g,(_,latex)=>{
-    math.push({latex:latex.trim(),display:false});
-    return '\x02MATH'+(math.length-1)+'\x02';
-  });
+  // 3. Extraer math — ¡ANTES del markdown!
+  // \[...\] display
+  t=t.replace(/\\\[([\s\S]+?)\\\]/g,(_,latex)=>{maths.push({latex:latex.trim(),d:true});return '\x02M'+(maths.length-1)+'\x02';});
+  // $$...$$ display
+  t=t.replace(/\$\$([\s\S]+?)\$\$/g,(_,latex)=>{maths.push({latex:latex.trim(),d:true});return '\x02M'+(maths.length-1)+'\x02';});
+  // \(...\) inline
+  t=t.replace(/\\\((.+?)\\\)/g,(_,latex)=>{maths.push({latex:latex.trim(),d:false});return '\x02M'+(maths.length-1)+'\x02';});
+  // $...$ inline
+  t=t.replace(/\$([^$\n]+?)\$/g,(_,latex)=>{maths.push({latex:latex.trim(),d:false});return '\x02M'+(maths.length-1)+'\x02';});
 
-  // 4. Normal markdown processing
+  // 4. Markdown
   t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
   t=t.replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>');
   t=t.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/__(.+?)__/g,'<strong>$1</strong>');
   t=t.replace(/((^\|.+\|\n?)+)/gm,tb=>{
-    const rows=tb.trim().split('\n').filter(r=>r.trim());
-    if(rows.length<2)return tb;
-    const si=rows.findIndex(r=>/^\|[\s\-|:]+\|$/.test(r.trim()));
-    if(si<1)return tb;
+    const rows=tb.trim().split('\n').filter(r=>r.trim());if(rows.length<2)return tb;
+    const si=rows.findIndex(r=>/^\|[\s\-|:]+\|$/.test(r.trim()));if(si<1)return tb;
     const cells=r=>r.split('|').slice(1,-1).map(c=>c.trim());
     return '<div class="table-wrap"><table><thead><tr>'+cells(rows[0]).map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+rows.slice(si+1).map(r=>'<tr>'+cells(r).map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
   });
@@ -814,37 +659,23 @@ function md(raw){
   t=t.replace(/((?:^[*-] .+\n?)+)/gm,m=>'<ul>'+m.trim().split('\n').map(l=>'<li>'+l.replace(/^[*-] /,'')+'</li>').join('')+'</ul>');
   t=t.split(/\n{2,}/).map(b=>{b=b.trim();if(!b||b.startsWith('<'))return b;return'<p>'+b.replace(/\n/g,'<br>')+'</p>';}).join('');
 
-  // 5. Restore code blocks
-  t=t.replace(/\x00CODE(\d+)\x00/g,(_,i)=>{
-    const blk=blocks[+i];const ext=blk.lang.toLowerCase();
-    return '<div class="code-block"><div class="code-hdr"><span class="code-lang">'+esc(blk.lang)+'</span><div class="code-hdr-btns">'
-      +'<button class="dl-btn" onclick="doDownloadBlock(\''+blk.id+'\',\''+esc(blk.lang)+'\')">'+dlLbl(ext)+'</button>'
-      +'<button class="copy-btn" onclick="doCopy(\''+blk.id+'\',this)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar</button>'
-      +'</div></div><pre id="'+blk.id+'"><code>'+hl(blk.code,ext)+'</code></pre></div>';
+  // 5. Restaurar código
+  t=t.replace(/\x00C(\d+)\x00/g,(_,i)=>{
+    const blk=codes[+i];const ext=blk.lang.toLowerCase();
+    return '<div class="code-block"><div class="code-hdr"><span class="code-lang">'+esc(blk.lang)+'</span><div class="code-hdr-btns"><button class="dl-btn" onclick="doDownloadBlock(\''+blk.id+'\',\''+esc(blk.lang)+'\')">'+dlLbl(ext)+'</button><button class="copy-btn" onclick="doCopy(\''+blk.id+'\',this)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar</button></div></div><pre id="'+blk.id+'"><code>'+hl(blk.code,ext)+'</code></pre></div>';
   });
 
-  // 6. Restore math blocks — render with KaTeX directly into HTML
-  t=t.replace(/\x02MATH(\d+)\x02/g,(_,i)=>{
-    const m=math[+i];
-    if(window.katex){
-      return renderKatexString(m.latex, m.display);
-    }
-    // KaTeX not loaded yet — return raw so renderMath() can handle it
-    return m.display ? '\\['+m.latex+'\\]' : '\\('+m.latex+'\\)';
+  // 6. Restaurar math → renderizar con KaTeX
+  t=t.replace(/\x02M(\d+)\x02/g,(_,i)=>{
+    const m=maths[+i];return renderKatex(m.latex,m.d);
   });
 
-  // 7. Restore DOWNLOAD cards
+  // 7. Restaurar descargas
   t=t.replace(/\x01DL:([^\x01]+)\x01/g,(_,fn)=>{
-    const ext=fExt(fn);const lbl=dlLbl(ext);const lb=blocks[blocks.length-1];
-    if(ext==='pdf'){
-      const pid='p'+Math.random().toString(36).slice(2,8);
-      window['__pr_'+pid]=raw;
-      return '<div class="dl-card"><div class="dl-card-info"><div class="dl-card-name">'+esc(fn)+'</div><div class="dl-card-type">PDF · Generado por Kenyra IA</div></div>'
-        +'<button class="dl-card-btn" onclick="generatePDF(window[\'__pr_'+pid+'\'],\''+esc(fn)+'\')">'+lbl+'</button></div>';
-    }
+    const ext=fExt(fn);const lbl=dlLbl(ext);const lb=codes[codes.length-1];
+    if(ext==='pdf'){const pid='p'+Math.random().toString(36).slice(2,8);window['__pr_'+pid]=raw;return '<div class="dl-card"><div class="dl-card-info"><div class="dl-card-name">'+esc(fn)+'</div><div class="dl-card-type">PDF · Generado por Kenyra IA</div></div><button class="dl-card-btn" onclick="generatePDF(window[\'__pr_'+pid+'\'],\''+esc(fn)+'\')">'+lbl+'</button></div>';}
     const bid=lb?lb.id:'';const bl=lb?lb.lang:ext;
-    return '<div class="dl-card"><div class="dl-card-info"><div class="dl-card-name">'+esc(fn)+'</div><div class="dl-card-type">'+ext.toUpperCase()+' · Generado por Kenyra IA</div></div>'
-      +'<button class="dl-card-btn" onclick="doDownloadBlock(\''+bid+'\',\''+esc(bl)+'\',\''+esc(fn)+'\')">'+lbl+'</button></div>';
+    return '<div class="dl-card"><div class="dl-card-info"><div class="dl-card-name">'+esc(fn)+'</div><div class="dl-card-type">'+ext.toUpperCase()+' · Generado por Kenyra IA</div></div><button class="dl-card-btn" onclick="doDownloadBlock(\''+bid+'\',\''+esc(bl)+'\',\''+esc(fn)+'\')">'+lbl+'</button></div>';
   });
   return t;
 }
@@ -878,19 +709,14 @@ function hl(code,lang){
 
 window.doCopy=function(id,btn){
   const el=document.getElementById(id);if(!el)return;
-  navigator.clipboard.writeText(el.innerText).then(()=>{
-    btn.textContent='✓ Copiado';btn.classList.add('ok');
-    setTimeout(()=>{btn.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar';btn.classList.remove('ok');},2000);
-  });
+  navigator.clipboard.writeText(el.innerText).then(()=>{btn.textContent='✓ Copiado';btn.classList.add('ok');setTimeout(()=>{btn.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copiar';btn.classList.remove('ok');},2000);});
 };
 window.doDownloadBlock=function(id,lang,customName){
-  const el=document.getElementById(id);if(!el)return;
-  const content=el.innerText;
+  const el=document.getElementById(id);if(!el)return;const content=el.innerText;
   const ext=(customName?fExt(customName):lang).toLowerCase();
   if(ext==='pdf'){generatePDF(content,customName||'documento.pdf');return;}
   const fn=customName||prompt('Nombre del archivo:','archivo.'+lang.toLowerCase());
-  if(!fn)return;
-  dlBlob(content,fn,getMime(fExt(fn)||lang.toLowerCase()));
+  if(!fn)return;dlBlob(content,fn,getMime(fExt(fn)||lang.toLowerCase()));
 };
 function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
@@ -899,7 +725,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   userAv=localStorage.getItem('smi_avatar')||pickAv(localStorage.getItem('smi_user_name')||'');
   window.__setUser(localStorage.getItem('smi_user_name')||'Usuario',localStorage.getItem('smi_user_photo')||'',localStorage.getItem('smi_user_email')||'');
   showWelcome();
-
   document.getElementById('btnNew').addEventListener('click',newChat);
   document.getElementById('btnNewDr').addEventListener('click',()=>{closeDrw();newChat();});
   document.getElementById('btnNewMob').addEventListener('click',newChat);
@@ -910,15 +735,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('rowDr').addEventListener('click',()=>toggleCfg('Dr'));
   document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   document.getElementById('chatInput').addEventListener('input',function(){resize(this);});
-
   document.getElementById('chatInput').addEventListener('paste',async e=>{
     const imgItems=[...e.clipboardData.items].filter(i=>i.type.startsWith('image/'));
-    if(!imgItems.length)return;
-    e.preventDefault();
+    if(!imgItems.length)return;e.preventDefault();
     for(const item of imgItems){const f=item.getAsFile();if(!f)continue;try{const url=await rdUrl(f);pendingImages.push({url,name:'imagen.png'});}catch(err){console.error(err);}}
     updateImgStrip();
   });
-
   document.getElementById('attachBtn').addEventListener('click',()=>document.getElementById('fileInput').click());
   document.getElementById('fileInput').addEventListener('change',async function(){
     for(const f of [...this.files]){
@@ -927,7 +749,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
     this.value='';updateFileStrip();updateImgStrip();
   });
-
   const main=document.querySelector('.main');
   main.addEventListener('dragover',e=>{e.preventDefault();main.style.outline='2px dashed var(--ac)';});
   main.addEventListener('dragleave',()=>{main.style.outline='';});
