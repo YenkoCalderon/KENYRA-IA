@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kenyra IA — Acceso</title>
+  <link rel="icon" type="image/png" href="KENYRAIA.PNG">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Raleway:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #06080d;
+      --card: rgba(10, 14, 22, 0.92);
+      --gold: #c8974a;
+      --gold2: #f0c070;
+      --gold3: #7a4e1a;
+      --blue: #1e3a5f;
+      --blue2: #4a8aff;
+      --tx: #e8e0d0;
+      --muted: #5a6070;
+      --muted2: #8090a0;
+      --err: #ff6b6b;
+      --border: rgba(200, 151, 74, 0.18);
+      --border2: rgba(200, 151, 74, 0.35);
+    }
+
+    body {
+      font-family: 'Raleway', sans-serif;
+      background: var(--bg);
+      color: var(--tx);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── BACKGROUND ── */
+    .bg-layer {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse 70% 60% at 15% 10%, rgba(200,151,74,0.06) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 70% at 85% 90%, rgba(30,58,95,0.15) 0%, transparent 55%),
+        radial-gradient(ellipse 80% 40% at 50% 50%, rgba(6,8,13,1) 0%, transparent 100%);
+    }
+
+    /* Circuit board pattern */
+    .bg-circuit {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.18;
+      background-image:
+        linear-gradient(rgba(200,151,74,0.4) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(200,151,74,0.4) 1px, transparent 1px),
+        linear-gradient(rgba(200,151,74,0.15) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(200,151,74,0.15) 1px, transparent 1px);
+      background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+      mask-image: radial-gradient(ellipse 85% 85% at 50% 50%, black 30%, transparent 80%);
+    }
+
+    /* Floating particles */
+    .particles {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+    }
+    .particle {
+      position: absolute;
+      width: 2px; height: 2px;
+      background: var(--gold);
+      border-radius: 50%;
+      opacity: 0;
+      animation: float-up var(--dur) var(--delay) ease-in infinite;
+    }
+    @keyframes float-up {
+      0%   { opacity: 0; transform: translateY(0) scale(1); }
+      10%  { opacity: 0.6; }
+      90%  { opacity: 0.2; }
+      100% { opacity: 0; transform: translateY(-120vh) scale(0.3); }
+    }
+
+    /* Glowing orb */
+    .orb {
+      position: fixed; width: 500px; height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(200,151,74,0.04) 0%, transparent 70%);
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 0;
+      animation: pulse-orb 6s ease-in-out infinite;
+    }
+    @keyframes pulse-orb {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+      50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+    }
+
+    /* ── CARD ── */
+    .card {
+      position: relative; z-index: 2;
+      width: 100%; max-width: 420px;
+      padding: 48px 44px 40px;
+      background: var(--card);
+      border: 1px solid var(--border2);
+      border-radius: 28px;
+      backdrop-filter: blur(20px);
+      box-shadow:
+        0 40px 100px rgba(0,0,0,0.8),
+        0 0 0 1px rgba(200,151,74,0.08) inset,
+        0 1px 0 rgba(200,151,74,0.25) inset,
+        inset 0 -1px 0 rgba(0,0,0,0.5);
+      animation: card-rise 0.7s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    @keyframes card-rise {
+      from { opacity: 0; transform: translateY(40px) scale(0.96); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* Corner accents */
+    .card::before, .card::after {
+      content: ''; position: absolute;
+      width: 24px; height: 24px;
+      border-color: var(--gold);
+      border-style: solid;
+      opacity: 0.5;
+    }
+    .card::before {
+      top: 14px; left: 14px;
+      border-width: 2px 0 0 2px;
+      border-radius: 4px 0 0 0;
+    }
+    .card::after {
+      bottom: 14px; right: 14px;
+      border-width: 0 2px 2px 0;
+      border-radius: 0 0 4px 0;
+    }
+
+    /* Corner accents 2 */
+    .corner-tr, .corner-bl {
+      position: absolute;
+      width: 24px; height: 24px;
+      border-color: var(--gold);
+      border-style: solid;
+      opacity: 0.5;
+    }
+    .corner-tr { top: 14px; right: 14px; border-width: 2px 2px 0 0; border-radius: 0 4px 0 0; }
+    .corner-bl { bottom: 14px; left: 14px; border-width: 0 0 2px 2px; border-radius: 0 0 0 4px; }
+
+    /* ── LOGO ── */
+    .logo-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      margin-bottom: 32px;
+      animation: logo-in 0.8s cubic-bezier(.16,1,.3,1) 0.1s both;
+    }
+    @keyframes logo-in {
+      from { opacity: 0; transform: scale(0.85) translateY(-10px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    .logo-img-wrap {
+      position: relative;
+      width: 90px; height: 90px;
+      margin-bottom: 14px;
+    }
+    .logo-img-wrap::before {
+      content: '';
+      position: absolute; inset: -8px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, var(--gold), var(--gold2), var(--gold3), var(--gold));
+      animation: spin-ring 6s linear infinite;
+      opacity: 0.4;
+    }
+    .logo-img-wrap::after {
+      content: '';
+      position: absolute; inset: -4px;
+      border-radius: 50%;
+      background: var(--bg);
+    }
+    @keyframes spin-ring {
+      to { transform: rotate(360deg); }
+    }
+
+    .logo-img {
+      position: relative; z-index: 2;
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(200,151,74,0.4);
+      box-shadow: 0 0 30px rgba(200,151,74,0.25), 0 8px 32px rgba(0,0,0,0.6);
+      display: block;
+    }
+
+    /* Fallback icon when no image */
+    .logo-fallback {
+      position: relative; z-index: 2;
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0f1a2e 0%, #1a2a40 100%);
+      border: 2px solid rgba(200,151,74,0.5);
+      box-shadow: 0 0 30px rgba(200,151,74,0.25), 0 8px 32px rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+    }
+
+    .logo-glow {
+      position: absolute; inset: 0; z-index: 3;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(200,151,74,0.12), transparent 60%);
+      pointer-events: none;
+    }
+
+    .brand-name {
+      font-family: 'Cinzel', serif;
+      font-size: 22px; font-weight: 700;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, var(--gold2) 0%, var(--gold) 50%, var(--gold2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: none;
+    }
+    .brand-sub {
+      font-size: 10px; letter-spacing: 3.5px; text-transform: uppercase;
+      color: var(--muted2); font-weight: 500; margin-top: 3px;
+    }
+
+    /* ── HEADLINE ── */
+    .headline {
+      text-align: center; margin-bottom: 8px;
+      animation: fade-up 0.6s cubic-bezier(.16,1,.3,1) 0.25s both;
+    }
+    .headline h1 {
+      font-family: 'Raleway', sans-serif;
+      font-size: 24px; font-weight: 300; letter-spacing: -.2px;
+      color: var(--tx); line-height: 1.3;
+    }
+    .headline h1 strong {
+      font-weight: 700;
+      background: linear-gradient(90deg, var(--gold), var(--gold2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sub {
+      text-align: center; font-size: 13px; color: var(--muted2); line-height: 1.65;
+      margin-bottom: 30px; font-weight: 400;
+      animation: fade-up 0.6s cubic-bezier(.16,1,.3,1) 0.3s both;
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+    /* ── ERROR ── */
+    .err-box {
+      display: none; align-items: center; gap: 10px;
+      background: rgba(255,107,107,0.08);
+      border: 1px solid rgba(255,107,107,0.2);
+      border-radius: 10px; padding: 11px 14px;
+      color: var(--err); font-size: 12.5px;
+      margin-bottom: 16px;
+      animation: fade-up 0.25s ease;
+    }
+    .err-box.show { display: flex; }
+
+    /* ── GOOGLE BTN ── */
+    .btn-g {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      width: 100%; padding: 15px 20px;
+      background: rgba(255,255,255,0.96);
+      color: #1a1a2e;
+      border: none; border-radius: 14px;
+      font-family: 'Raleway', sans-serif; font-size: 15px; font-weight: 600;
+      cursor: pointer; position: relative; overflow: hidden;
+      transition: transform .18s, box-shadow .18s;
+      letter-spacing: .3px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.8) inset;
+      animation: fade-up 0.6s cubic-bezier(.16,1,.3,1) 0.4s both;
+    }
+    .btn-g::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(200,151,74,0.1), transparent);
+      opacity: 0; transition: opacity .2s;
+    }
+    .btn-g:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(200,151,74,0.3), 0 1px 0 rgba(255,255,255,0.8) inset; }
+    .btn-g:hover::before { opacity: 1; }
+    .btn-g:active { transform: translateY(0); }
+    .btn-g.loading { pointer-events: none; }
+    .btn-g .g-ic, .btn-g .g-lb { transition: opacity .2s; }
+    .btn-g.loading .g-ic, .btn-g.loading .g-lb { opacity: 0; }
+    .spinner {
+      position: absolute; width: 20px; height: 20px;
+      border: 2px solid rgba(26,26,46,0.15);
+      border-top-color: #1a1a2e;
+      border-radius: 50%; opacity: 0;
+      animation: spin .7s linear infinite; transition: opacity .2s;
+    }
+    .btn-g.loading .spinner { opacity: 1; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── DIVIDER ── */
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 22px 0 18px; color: var(--muted); font-size: 10px;
+      letter-spacing: 2.5px; font-weight: 500;
+      animation: fade-up 0.6s cubic-bezier(.16,1,.3,1) 0.45s both;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border2), transparent);
+    }
+    .divider-diamond {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .divider-diamond span { color: var(--gold); font-size: 8px; }
+
+    /* ── BADGES ── */
+    .badges {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      animation: fade-up 0.6s cubic-bezier(.16,1,.3,1) 0.5s both;
+    }
+    .badge {
+      display: flex; align-items: center; gap: 7px;
+      background: rgba(200,151,74,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 13px;
+      font-size: 11.5px; color: var(--muted2); font-weight: 400;
+      transition: border-color .2s, background .2s;
+    }
+    .badge:hover {
+      border-color: rgba(200,151,74,0.3);
+      background: rgba(200,151,74,0.07);
+    }
+    .badge-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      box-shadow: 0 0 6px currentColor;
+      flex-shrink: 0;
+    }
+    .dot-gold { background: var(--gold); color: var(--gold); }
+    .dot-blue { background: var(--blue2); color: var(--blue2); }
+
+    /* ── FOOTER ── */
+    .foot {
+      margin-top: 26px; text-align: center;
+      font-size: 11px; color: var(--muted); line-height: 1.8;
+      animation: fade-up 0.6s cubic-bezier(.16,1,.3,1) 0.55s both;
+    }
+    .foot strong {
+      font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px;
+      background: linear-gradient(90deg, var(--gold), var(--gold2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── SCAN LINE EFFECT ── */
+    .scan {
+      position: fixed; inset: 0; pointer-events: none; z-index: 10;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    }
+
+    @media (max-width: 460px) {
+      .card { padding: 36px 28px 32px; border-radius: 22px; }
+      .headline h1 { font-size: 21px; }
+      .logo-img-wrap, .logo-fallback { width: 76px; height: 76px; }
+      .logo-img { width: 76px; height: 76px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-layer"></div>
+  <div class="bg-circuit"></div>
+  <div class="orb"></div>
+  <div class="scan"></div>
+
+  <!-- Particles -->
+  <div class="particles" id="particles"></div>
+
+  <div class="card">
+    <div class="corner-tr"></div>
+    <div class="corner-bl"></div>
+
+    <!-- LOGO -->
+    <div class="logo-wrap">
+      <div class="logo-img-wrap">
+        <img
+          class="logo-img"
+          src="KENYRAIA.PNG"
+          alt="Kenyra IA Logo"
+          onerror="this.style.display='none'; document.getElementById('logoFallback').style.display='flex';"
+        />
+        <div class="logo-fallback" id="logoFallback" style="display:none;">✨</div>
+        <div class="logo-glow"></div>
+      </div>
+      <div class="brand-name">Kenyra IA</div>
+    </div>
+
+    <!-- HEADLINE -->
+    <div class="headline">
+      <h1>BIENVENIDO <strong>AMIGO.</strong></h1>
+    </div>
+    <p class="sub">Inicia sesión para continuar con tu asistente de inteligencia artificial.</p>
+
+    <!-- ERROR -->
+    <div class="err-box" id="errBox">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="errMsg">Error al iniciar sesión.</span>
+    </div>
+
+    <!-- GOOGLE BUTTON -->
+    <button class="btn-g" id="btnG" onclick="loginGoogle()">
+      <svg class="g-ic" width="20" height="20" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      <span class="g-lb">Continuar con Google</span>
+      <div class="spinner"></div>
+    </button>
+
+    <!-- DIVIDER -->
+    <div class="divider">
+      <div class="divider-diamond">
+        <span>◆</span>
+        ACCESO CORPORATIVO
+        <span>◆</span>
+      </div>
+    </div>
+
+    <!-- BADGES -->
+    <div class="badges">
+      <div class="badge">
+        <div class="badge-dot dot-gold"></div>
+        Solo cuentas autorizadas
+      </div>
+      <div class="badge">
+        <div class="badge-dot dot-blue"></div>
+        Sesión segura · Firebase
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="foot">
+      Creador: ©Yenko Huanaquiri Calderón<br/>
+      <strong>KENYRA.IA</strong>
+    </div>
+  </div>
+
+  <script>
+    // Particles
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 30; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.cssText = `
+        left: ${Math.random() * 100}%;
+        bottom: ${Math.random() * 20}%;
+        --dur: ${6 + Math.random() * 10}s;
+        --delay: ${Math.random() * 8}s;
+        width: ${1 + Math.random() * 2}px;
+        height: ${1 + Math.random() * 2}px;
+        opacity: 0;
+      `;
+      if (Math.random() > 0.5) p.style.background = '#4a8aff';
+      container.appendChild(p);
+    }
+  </script>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+    const auth = getAuth(initializeApp({
+      apiKey: "AIzaSyC7iVtxb_TGJtjJp8FX1DRs-ESU-UQEc0M",
+      authDomain: "agente-ia-a4ec5.firebaseapp.com",
+      projectId: "agente-ia-a4ec5",
+      storageBucket: "agente-ia-a4ec5.firebasestorage.app",
+      messagingSenderId: "1025106952940",
+      appId: "1:1025106952940:web:29f85856c368433245dbc9"
+    }));
+    const provider = new GoogleAuthProvider();
+
+    window.loginGoogle = async () => {
+      const btn = document.getElementById('btnG');
+      const err = document.getElementById('errBox');
+      err.classList.remove('show');
+      btn.classList.add('loading');
+      try {
+        const r = await signInWithPopup(auth, provider);
+        const u = r.user;
+        localStorage.setItem("smi_auth_token", await u.getIdToken());
+        localStorage.setItem("smi_user_name",  u.displayName || "Usuario");
+        localStorage.setItem("smi_user_email", u.email || "");
+        localStorage.setItem("smi_user_photo", u.photoURL || "");
+        window.location.href = "index.html";
+      } catch(e) {
+        btn.classList.remove('loading');
+        const msg = document.getElementById('errMsg');
+        if (e.code === 'auth/popup-closed-by-user') msg.textContent = 'Cerraste la ventana antes de completar el login.';
+        else if (e.code === 'auth/network-request-failed') msg.textContent = 'Error de red. Verifica tu conexión.';
+        else msg.textContent = `Error: ${e.message}`;
+        err.classList.add('show');
+      }
+    };
+
+    onAuthStateChanged(auth, u => { if (u) window.location.href = "index.html"; });
+  </script>
+</body>
+</html>
