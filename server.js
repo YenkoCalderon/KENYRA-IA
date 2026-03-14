@@ -23,7 +23,6 @@ const PORT     = process.env.PORT || 3000;
 const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
-// ─── Debug de variables de entorno ───────────────────────────────────────
 console.log("🔧 Variables de entorno detectadas:");
 console.log("   PORT      :", process.env.PORT      || "❌ no definida");
 console.log("   AI_PROVIDER:", process.env.AI_PROVIDER || "❌ no definida");
@@ -179,10 +178,78 @@ function needsWebSearch(messages) {
     "sentai", "kamen rider", "ultraman", "marvel", "dc comics",
     "cuánto va", "cuanto va", "quién ganó", "quien gano", "quién es",
     "quien es el actual", "temperatura", "clima", "tiempo en",
-    "cuántos", "cuantos", "cuántas", "cuantas"
+    "cuántos", "cuantos", "cuántas", "cuantas",
+    "dame todos", "dame todas", "enumera", "lista"
   ];
   const lower = text.toLowerCase();
   return keywords.some(k => lower.includes(k));
+}
+
+// ─── Detecta si necesita lista completa (Wikipedia) ──────────────────────
+function needsFullList(text) {
+  const lower = text.toLowerCase();
+  const listKeywords = [
+    "todos los", "todas las", "lista completa", "dame todos", "dame todas",
+    "enumera", "lista de", "cuántos hay", "cuantos hay",
+    "sentai", "kamen rider", "ultraman", "power rangers",
+    "todos hasta", "todas hasta", "hasta el 2026", "hasta 2026"
+  ];
+  return listKeywords.some(k => lower.includes(k));
+}
+
+// ─── Fetch contenido de Wikipedia via API ────────────────────────────────
+async function fetchWikipedia(query) {
+  return new Promise((resolve) => {
+    const searchTerm = encodeURIComponent(query.slice(0, 150));
+    const options = {
+      hostname: "es.wikipedia.org",
+      path: `/w/api.php?action=query&list=search&srsearch=${searchTerm}&format=json&srlimit=1`,
+      method: "GET",
+      headers: { "Accept": "application/json", "User-Agent": "KenyraIA/1.0" }
+    };
+    const req = https.request(options, res => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          const results = data.query?.search || [];
+          if (!results.length) return resolve(null);
+          const pageId = results[0].pageid;
+          const contentOptions = {
+            hostname: "es.wikipedia.org",
+            path: `/w/api.php?action=query&pageids=${pageId}&prop=extracts&exintro=false&explaintext=true&format=json&exchars=8000`,
+            method: "GET",
+            headers: { "Accept": "application/json", "User-Agent": "KenyraIA/1.0" }
+          };
+          const req2 = https.request(contentOptions, res2 => {
+            const chunks2 = [];
+            res2.on("data", c => chunks2.push(c));
+            res2.on("end", () => {
+              try {
+                const data2 = JSON.parse(Buffer.concat(chunks2).toString("utf8"));
+                const page = data2.query?.pages?.[pageId];
+                const extract = page?.extract || "";
+                if (!extract) return resolve(null);
+                console.log(`📖 Wikipedia: "${page.title}" (${extract.length} chars)`);
+                resolve(`[Wikipedia: ${page.title}]\n${extract.slice(0, 6000)}`);
+              } catch(e) {
+                console.log(`❌ Wikipedia content error: ${e.message}`);
+                resolve(null);
+              }
+            });
+          });
+          req2.on("error", () => resolve(null));
+          req2.end();
+        } catch(e) {
+          console.log(`❌ Wikipedia search error: ${e.message}`);
+          resolve(null);
+        }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.end();
+  });
 }
 
 // ─── Búsqueda web con SerpApi ─────────────────────────────────────────────
@@ -194,6 +261,17 @@ async function doWebSearch(query) {
   }
 
   console.log(`🔑 Usando SERP_API_KEY: ${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`);
+
+  // Si necesita lista completa, usar Wikipedia directamente
+  if (needsFullList(query)) {
+    console.log("📖 Detectada solicitud de lista completa — buscando en Wikipedia...");
+    const wikiResult = await fetchWikipedia(query);
+    if (wikiResult) {
+      console.log("✅ Contenido Wikipedia obtenido");
+      return wikiResult;
+    }
+    console.log("⚠️ Wikipedia no encontró resultados, usando SerpApi...");
+  }
 
   return new Promise((resolve) => {
     const q = encodeURIComponent(query.slice(0, 200));
@@ -256,7 +334,7 @@ function injectSearchResults(systemPrompt, searchResults) {
 🌐 BÚSQUEDA WEB EN TIEMPO REAL
 Fecha actual: ${today}
 
-Los siguientes resultados fueron obtenidos de internet ahora mismo. Úsalos para dar una respuesta actualizada y precisa. Cita las fuentes cuando sea relevante.
+Los siguientes resultados fueron obtenidos de internet ahora mismo. Úsalos para dar una respuesta actualizada y precisa. NO incluyas URLs ni links en tu respuesta a menos que el usuario los pida explícitamente.
 
 ${searchResults}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
@@ -267,7 +345,6 @@ async function callAPI(payload) {
   let systemPrompt = payload.system || "";
   let hostname, urlPath, headers, body;
 
-  // ── Búsqueda web automática con SerpApi ──────────────────────────────
   if (needsWebSearch(rawMessages)) {
     const query = extractLastUserText(rawMessages);
     console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
@@ -279,7 +356,7 @@ async function callAPI(payload) {
       const today = new Date().toLocaleDateString("es-ES", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
       });
-      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real (estadísticas, noticias, precios), indica que no tienes acceso a internet en este momento y que los datos pueden estar desactualizados. NUNCA inventes cifras o estadísticas recientes.`;
+      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real, indica que no tienes acceso a internet. NUNCA inventes cifras o estadísticas recientes.`;
       console.log("⚠️  Sin resultados web — fecha inyectada");
     }
   }
@@ -288,7 +365,7 @@ async function callAPI(payload) {
     const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
     const msgs = flattenForOpenAI(rawMessages, systemPrompt);
     if (!msgs) throw new Error("No hay mensajes válidos.");
-    body = JSON.stringify({ model, messages: msgs, max_tokens: 1500, temperature: 0.7 });
+    body = JSON.stringify({ model, messages: msgs, max_tokens: 4000, temperature: 0.3 });
     hostname = "api.groq.com";
     urlPath  = "/openai/v1/chat/completions";
     headers  = {
@@ -303,7 +380,7 @@ async function callAPI(payload) {
     const msgs = flattenForAnthropic(rawMessages);
     if (!msgs) throw new Error("No hay mensajes válidos.");
     const apiPayload = {
-      model, max_tokens: 1500, messages: msgs,
+      model, max_tokens: 4000, messages: msgs,
       tools: [{ type: "web_search_20250305", name: "web_search" }]
     };
     if (systemPrompt) apiPayload.system = systemPrompt;
@@ -323,7 +400,7 @@ async function callAPI(payload) {
     const model = process.env.OPENAI_MODEL || "gpt-4o";
     const msgs = flattenForOpenAI(rawMessages, systemPrompt);
     if (!msgs) throw new Error("No hay mensajes válidos.");
-    body     = JSON.stringify({ model, messages: msgs, max_tokens: 1500 });
+    body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000 });
     hostname = "api.openai.com";
     urlPath  = "/v1/chat/completions";
     headers  = {
