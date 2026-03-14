@@ -23,18 +23,26 @@ const PORT     = process.env.PORT || 3000;
 const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
-// Modelos que soportan visión — NO se les quitan las imágenes
-const VISION_KEYWORDS = ["vision", "llama-4", "llava", "scout", "gpt-4o", "gpt-4-turbo"];
-const modelName = (process.env.GROQ_MODEL || process.env.OPENAI_MODEL || "").toLowerCase();
-const SUPPORTS_VISION = VISION_KEYWORDS.some(v => modelName.includes(v));
+// ─── Modelos Groq ──────────────────────────────────────────────────────────
+// GROQ_MODEL        = modelo de texto/razonamiento (ej: llama-3.3-70b-versatile)
+// GROQ_VISION_MODEL = modelo con visión (ej: meta-llama/llama-4-scout-17b-16e-instruct)
+const GROQ_TEXT_MODEL   = process.env.GROQ_MODEL        || "llama-3.3-70b-versatile";
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+
+// Detecta si el mensaje actual contiene imágenes
+function messageHasImage(messages) {
+  if (!messages || messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  return Array.isArray(last.content) && last.content.some(b => b.type === "image");
+}
 
 console.log("🔧 Variables de entorno detectadas:");
-console.log("   PORT        :", process.env.PORT        || "❌ no definida");
-console.log("   AI_PROVIDER :", process.env.AI_PROVIDER || "❌ no definida");
-console.log("   GROQ_API_KEY:", process.env.GROQ_API_KEY  ? "✅ existe" : "❌ no definida");
-console.log("   GROQ_MODEL  :", process.env.GROQ_MODEL   || "❌ no definida");
-console.log("   TAVILY_API_KEY:", process.env.TAVILY_API_KEY ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
-console.log("   VISION      :", SUPPORTS_VISION ? "✅ activado" : "⚠️  sin visión (cambia GROQ_MODEL a llama-4-scout)");
+console.log("   PORT             :", process.env.PORT        || "❌ no definida");
+console.log("   AI_PROVIDER      :", process.env.AI_PROVIDER || "❌ no definida");
+console.log("   GROQ_API_KEY     :", process.env.GROQ_API_KEY  ? "✅ existe" : "❌ no definida");
+console.log("   GROQ_MODEL       :", GROQ_TEXT_MODEL);
+console.log("   GROQ_VISION_MODEL:", GROQ_VISION_MODEL);
+console.log("   TAVILY_API_KEY   :", process.env.TAVILY_API_KEY ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -67,7 +75,7 @@ function toOpenAIContent(content, stripImages = false) {
         if (t) parts.push({ type: "text", text: t });
       } else if (block.type === "image") {
         if (stripImages) {
-          parts.push({ type: "text", text: "[imagen adjunta — este modelo no soporta visión]" });
+          parts.push({ type: "text", text: "[imagen adjunta — modelo sin visión]" });
         } else {
           const src = block.source || {};
           if (src.type === "base64" && src.data) {
@@ -101,7 +109,7 @@ function contentToString(content) {
   return String(content).trim() || null;
 }
 
-function flattenForOpenAI(messages, systemPrompt) {
+function flattenForOpenAI(messages, systemPrompt, useVision = false) {
   const result = [];
   if (systemPrompt) result.push({ role: "system", content: systemPrompt });
   let lastRole = "system";
@@ -109,7 +117,8 @@ function flattenForOpenAI(messages, systemPrompt) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
     const isLast = (i === messages.length - 1);
-    const stripImages = !SUPPORTS_VISION;
+    // Solo pasar imágenes si estamos usando el modelo vision
+    const stripImages = !useVision;
     let content = isLast && role === "user"
       ? toOpenAIContent(m.content, stripImages)
       : contentToString(m.content);
@@ -119,7 +128,9 @@ function flattenForOpenAI(messages, systemPrompt) {
       if (typeof prev.content === "string" && typeof content === "string") {
         prev.content += "\n" + content;
       } else {
-        const toArr = c => typeof c === "string" ? [{ type: "text", text: c }] : (Array.isArray(c) ? c : [{ type: "text", text: String(c) }]);
+        const toArr = c => typeof c === "string"
+          ? [{ type: "text", text: c }]
+          : (Array.isArray(c) ? c : [{ type: "text", text: String(c) }]);
         prev.content = [...toArr(prev.content), ...toArr(content)];
       }
     } else {
@@ -180,7 +191,9 @@ function flattenForAnthropic(messages) {
 
     if (role === lastRole) {
       const prev = result[result.length - 1];
-      const toStr = c => typeof c === "string" ? c : c.filter(b => b.type === "text").map(b => b.text).join("\n");
+      const toStr = c => typeof c === "string"
+        ? c
+        : c.filter(b => b.type === "text").map(b => b.text).join("\n");
       prev.content = toStr(prev.content) + "\n" + toStr(content);
     } else {
       result.push({ role, content });
@@ -199,7 +212,9 @@ function needsWebSearch(messages) {
   const last = messages[messages.length - 1];
   const text = typeof last.content === "string"
     ? last.content
-    : (Array.isArray(last.content) ? last.content.filter(b => b.type === "text").map(b => b.text).join(" ") : "");
+    : (Array.isArray(last.content)
+        ? last.content.filter(b => b.type === "text").map(b => b.text).join(" ")
+        : "");
   const keywords = [
     "actualidad", "actual", "ahora", "hoy", "2024", "2025", "2026", "2027",
     "noticia", "noticias", "último", "ultima", "últimas", "ultimas",
@@ -223,7 +238,6 @@ function needsWebSearch(messages) {
   return keywords.some(k => lower.includes(k));
 }
 
-// ─── Extrae el texto del último mensaje ──────────────────────────────────
 function extractLastUserText(messages) {
   if (!messages || messages.length === 0) return "";
   const last = messages[messages.length - 1];
@@ -237,10 +251,7 @@ function extractLastUserText(messages) {
 // ─── Búsqueda con Tavily ──────────────────────────────────────────────────
 async function doTavilySearch(query) {
   const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) {
-    console.log("❌ TAVILY_API_KEY no definida");
-    return null;
-  }
+  if (!apiKey) { console.log("❌ TAVILY_API_KEY no definida"); return null; }
 
   console.log(`🔍 Tavily buscando: "${query.slice(0, 80)}..."`);
 
@@ -256,7 +267,7 @@ async function doTavilySearch(query) {
   });
 
   return new Promise((resolve) => {
-    const options = {
+    const req = https.request({
       hostname: "api.tavily.com",
       path: "/search",
       method: "POST",
@@ -264,9 +275,7 @@ async function doTavilySearch(query) {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(body)
       }
-    };
-
-    const req = https.request(options, res => {
+    }, res => {
       const chunks = [];
       res.on("data", c => chunks.push(c));
       res.on("end", () => {
@@ -274,21 +283,15 @@ async function doTavilySearch(query) {
           const raw = Buffer.concat(chunks).toString("utf8");
           console.log(`🔎 Tavily [${res.statusCode}]: ${raw.slice(0, 200)}`);
           const data = JSON.parse(raw);
-
           let result = "";
-
-          if (data.answer) {
-            result += `Respuesta directa: ${data.answer}\n\n`;
-          }
-
-          if (data.results && data.results.length > 0) {
+          if (data.answer) result += `Respuesta directa: ${data.answer}\n\n`;
+          if (data.results?.length) {
             result += data.results.map((r, i) =>
               `[${i+1}] ${r.title}\n${r.content || r.snippet || ""}`
             ).join("\n\n");
           }
-
           if (!result.trim()) return resolve(null);
-          console.log(`✅ Tavily: ${result.length} chars obtenidos`);
+          console.log(`✅ Tavily: ${result.length} chars`);
           resolve(result);
         } catch(e) {
           console.log(`❌ Tavily parse error: ${e.message}`);
@@ -296,17 +299,12 @@ async function doTavilySearch(query) {
         }
       });
     });
-
-    req.on("error", (e) => {
-      console.log(`❌ Tavily network error: ${e.message}`);
-      resolve(null);
-    });
+    req.on("error", e => { console.log(`❌ Tavily error: ${e.message}`); resolve(null); });
     req.write(body);
     req.end();
   });
 }
 
-// ─── Inyecta resultados de búsqueda en el system prompt ──────────────────
 function injectSearchResults(systemPrompt, searchResults) {
   const today = new Date().toLocaleDateString("es-ES", {
     weekday: "long", year: "numeric", month: "long", day: "numeric"
@@ -334,20 +332,29 @@ async function callAPI(payload) {
     const searchResults = await doTavilySearch(query);
     if (searchResults) {
       systemPrompt = injectSearchResults(systemPrompt, searchResults);
-      console.log("✅ Resultados Tavily inyectados en el prompt");
+      console.log("✅ Resultados Tavily inyectados");
     } else {
       const today = new Date().toLocaleDateString("es-ES", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
       });
-      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real, indica que no tienes acceso a internet. NUNCA inventes cifras o estadísticas recientes.`;
-      console.log("⚠️  Sin resultados web — fecha inyectada");
+      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. NUNCA inventes cifras o estadísticas recientes.`;
+      console.log("⚠️  Sin resultados web");
     }
   }
 
   if (PROVIDER === "groq") {
-    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-    const msgs = flattenForOpenAI(rawMessages, systemPrompt);
+    // ── Selección automática de modelo ──────────────────────────────────
+    // Si el mensaje tiene imagen → llama-4-scout (visión)
+    // Si es solo texto          → llama-3.3-70b (razonamiento)
+    const hasImage = messageHasImage(rawMessages);
+    const model = hasImage ? GROQ_VISION_MODEL : GROQ_TEXT_MODEL;
+    const useVision = hasImage;
+
+    console.log(`\n→ GROQ [${model}] imagen:${hasImage} msgs:${rawMessages.length}`);
+
+    const msgs = flattenForOpenAI(rawMessages, systemPrompt, useVision);
     if (!msgs) throw new Error("No hay mensajes válidos.");
+
     body = JSON.stringify({ model, messages: msgs, max_tokens: 4000, temperature: 0.3 });
     hostname = "api.groq.com";
     urlPath  = "/openai/v1/chat/completions";
@@ -356,7 +363,7 @@ async function callAPI(payload) {
       "Authorization":  `Bearer ${process.env.GROQ_API_KEY}`,
       "Content-Length": Buffer.byteLength(body),
     };
-    console.log(`\n→ GROQ [${model}] msgs:${msgs.length} vision:${SUPPORTS_VISION} body:${body.length}b`);
+    console.log(`   body: ${body.length}b`);
 
   } else if (PROVIDER === "anthropic") {
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
@@ -381,7 +388,7 @@ async function callAPI(payload) {
 
   } else {
     const model = process.env.OPENAI_MODEL || "gpt-4o";
-    const msgs = flattenForOpenAI(rawMessages, systemPrompt);
+    const msgs = flattenForOpenAI(rawMessages, systemPrompt, true);
     if (!msgs) throw new Error("No hay mensajes válidos.");
     body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000 });
     hostname = "api.openai.com";
@@ -400,7 +407,7 @@ async function callAPI(payload) {
       res.on("data", c => chunks.push(c));
       res.on("end", () => {
         const raw = Buffer.concat(chunks).toString("utf8");
-        console.log(`← ${PROVIDER.toUpperCase()} [${res.statusCode}]: ${raw.slice(0, 300)}`);
+        console.log(`← ${PROVIDER.toUpperCase()} [${res.statusCode}]: ${raw.slice(0, 400)}`);
         resolve({ status: res.statusCode, body: raw });
       });
     });
@@ -478,14 +485,15 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log("\n╔══════════════════════════════════════╗");
-  console.log("║       🤖  KENYRA IA  🤖              ║");
-  console.log("╠══════════════════════════════════════╣");
-  console.log(`║  Puerto:    ${PORT}                      ║`);
-  console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(26)}║`);
-  console.log(`║  Vision:    ${SUPPORTS_VISION ? "✅ activado              " : "⚠️  sin visión           "}║`);
-  console.log(`║  Web Search: ${process.env.TAVILY_API_KEY ? "✅ Tavily activo         " : "⚠️  Sin TAVILY_API_KEY   "}║`);
-  console.log("╚══════════════════════════════════════╝\n");
+  console.log("\n╔══════════════════════════════════════════════╗");
+  console.log("║         🤖  KENYRA IA  🤖                    ║");
+  console.log("╠══════════════════════════════════════════════╣");
+  console.log(`║  Puerto:         ${PORT}                          ║`);
+  console.log(`║  Provider:       ${PROVIDER.toUpperCase().padEnd(28)}║`);
+  console.log(`║  Modelo texto:   ${GROQ_TEXT_MODEL.padEnd(28)}║`);
+  console.log(`║  Modelo visión:  ${GROQ_VISION_MODEL.slice(0,28).padEnd(28)}║`);
+  console.log(`║  Web Search:     ${process.env.TAVILY_API_KEY ? "✅ Tavily activo              " : "⚠️  Sin TAVILY_API_KEY        "}║`);
+  console.log("╚══════════════════════════════════════════════╝\n");
 });
 
 server.on("error", err => {
