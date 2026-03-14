@@ -156,14 +156,29 @@ function needsWebSearch(messages) {
     ? last.content
     : (Array.isArray(last.content) ? last.content.filter(b => b.type === "text").map(b => b.text).join(" ") : "");
   const keywords = [
-    "actualidad", "actual", "ahora", "hoy", "2025", "2026", "2027",
+    // Tiempo / actualidad
+    "actualidad", "actual", "ahora", "hoy", "2024", "2025", "2026", "2027",
     "noticia", "noticias", "último", "ultima", "últimas", "ultimas",
-    "reciente", "recientes", "precio", "cotización", "dolar", "bitcoin",
-    "gol", "goles", "partido", "resultado", "campeón", "campeon",
-    "presidente", "elección", "elecciones", "guerra", "crisis",
+    "reciente", "recientes", "recientemente", "hoy en dia", "actualmente",
+    // Finanzas
+    "precio", "cotización", "dolar", "bitcoin", "crypto", "bolsa", "mercado",
+    // Deportes
+    "gol", "goles", "partido", "resultado", "campeón", "campeon", "liga",
+    "mundial", "torneo", "clasificacion", "tabla", "standings",
+    // Política / sociedad
+    "presidente", "elección", "elecciones", "guerra", "crisis", "gobierno",
+    "ministro", "congreso", "senado", "parlamento",
+    // Tecnología / entretenimiento
     "lanzó", "lanzamiento", "estreno", "nuevo modelo", "nueva version",
+    "película", "pelicula", "serie", "temporada", "anime", "manga",
+    // Listas completas (Super Sentai, etc.)
+    "todos los", "todas las", "lista de", "lista completa", "cuántos hay",
+    "cuantos hay", "historia de", "evolution", "evolución",
+    "sentai", "kamen rider", "ultraman", "marvel", "dc comics",
+    // Preguntas directas
     "cuánto va", "cuanto va", "quién ganó", "quien gano", "quién es",
-    "quien es el actual", "temperatura", "clima", "tiempo en"
+    "quien es el actual", "temperatura", "clima", "tiempo en",
+    "cuántos", "cuantos", "cuántas", "cuantas"
   ];
   const lower = text.toLowerCase();
   return keywords.some(k => lower.includes(k));
