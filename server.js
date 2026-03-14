@@ -156,26 +156,19 @@ function needsWebSearch(messages) {
     ? last.content
     : (Array.isArray(last.content) ? last.content.filter(b => b.type === "text").map(b => b.text).join(" ") : "");
   const keywords = [
-    // Tiempo / actualidad
     "actualidad", "actual", "ahora", "hoy", "2024", "2025", "2026", "2027",
     "noticia", "noticias", "último", "ultima", "últimas", "ultimas",
     "reciente", "recientes", "recientemente", "hoy en dia", "actualmente",
-    // Finanzas
     "precio", "cotización", "dolar", "bitcoin", "crypto", "bolsa", "mercado",
-    // Deportes
     "gol", "goles", "partido", "resultado", "campeón", "campeon", "liga",
     "mundial", "torneo", "clasificacion", "tabla", "standings",
-    // Política / sociedad
     "presidente", "elección", "elecciones", "guerra", "crisis", "gobierno",
     "ministro", "congreso", "senado", "parlamento",
-    // Tecnología / entretenimiento
     "lanzó", "lanzamiento", "estreno", "nuevo modelo", "nueva version",
     "película", "pelicula", "serie", "temporada", "anime", "manga",
-    // Listas completas (Super Sentai, etc.)
     "todos los", "todas las", "lista de", "lista completa", "cuántos hay",
-    "cuantos hay", "historia de", "evolution", "evolución",
+    "cuantos hay", "historia de", "evolución", "evolution",
     "sentai", "kamen rider", "ultraman", "marvel", "dc comics",
-    // Preguntas directas
     "cuánto va", "cuanto va", "quién ganó", "quien gano", "quién es",
     "quien es el actual", "temperatura", "clima", "tiempo en",
     "cuántos", "cuantos", "cuántas", "cuantas"
@@ -184,17 +177,16 @@ function needsWebSearch(messages) {
   return keywords.some(k => lower.includes(k));
 }
 
-// ─── Búsqueda web con Google Custom Search API (GRATIS 100/día) ──────────
+// ─── Búsqueda web con SerpApi (GRATIS 100/mes) ───────────────────────────
 async function doWebSearch(query) {
-  const apiKey = process.env.GOOGLE_SEARCH_KEY;
-  const cx     = process.env.GOOGLE_SEARCH_CX;
-  if (!apiKey || !cx) return null;
+  const apiKey = process.env.SERP_API_KEY;
+  if (!apiKey) return null;
 
   return new Promise((resolve) => {
     const q = encodeURIComponent(query.slice(0, 200));
     const options = {
-      hostname: "www.googleapis.com",
-      path: `/customsearch/v1?key=${apiKey}&cx=${cx}&q=${q}&num=5&lr=lang_es`,
+      hostname: "serpapi.com",
+      path: `/search.json?q=${q}&api_key=${apiKey}&hl=es&gl=pe&num=5`,
       method: "GET",
       headers: { "Accept": "application/json" }
     };
@@ -204,7 +196,7 @@ async function doWebSearch(query) {
       res.on("end", () => {
         try {
           const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          const results = (data.items || []).slice(0, 5);
+          const results = (data.organic_results || []).slice(0, 5);
           if (!results.length) return resolve(null);
           const summary = results.map((r, i) =>
             `[${i+1}] ${r.title}\n${r.snippet || ""}\nURL: ${r.link}`
@@ -252,20 +244,20 @@ async function callAPI(payload) {
     let systemPrompt = payload.system || "";
     let hostname, urlPath, headers, body;
 
-    // ── Búsqueda web automática con Google Custom Search ─────────────────
+    // ── Búsqueda web automática con SerpApi ──────────────────────────────
     if (needsWebSearch(rawMessages)) {
       const query = extractLastUserText(rawMessages);
-      console.log(`🔍 Buscando en Google: "${query.slice(0, 80)}..."`);
+      console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
       const searchResults = await doWebSearch(query);
       if (searchResults) {
         systemPrompt = injectSearchResults(systemPrompt, searchResults);
-        console.log("✅ Resultados de Google inyectados en el prompt");
+        console.log("✅ Resultados web inyectados en el prompt");
       } else {
         const today = new Date().toLocaleDateString("es-ES", {
           weekday: "long", year: "numeric", month: "long", day: "numeric"
         });
         systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real (estadísticas, noticias, precios), indica que no tienes acceso a internet en este momento y que los datos pueden estar desactualizados. NUNCA inventes cifras o estadísticas recientes.`;
-        console.log("⚠️  Sin GOOGLE_SEARCH_KEY/CX — fecha inyectada, sin búsqueda web");
+        console.log("⚠️  Sin SERP_API_KEY — fecha inyectada, sin búsqueda web");
       }
     }
 
@@ -406,7 +398,7 @@ server.listen(PORT, () => {
   console.log("╠══════════════════════════════════════╣");
   console.log(`║  Puerto:    ${PORT}                      ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(26)}║`);
-  console.log(`║  Web Search: ${(process.env.GOOGLE_SEARCH_KEY && process.env.GOOGLE_SEARCH_CX) ? "✅ Google Search API " : "⚠️  Sin Google API Key"}  ║`);
+  console.log(`║  Web Search: ${process.env.SERP_API_KEY ? "✅ SerpApi activo        " : "⚠️  Sin SERP_API_KEY     "}║`);
   console.log("╚══════════════════════════════════════╝\n");
 });
 
