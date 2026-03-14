@@ -48,7 +48,7 @@ function readBody(req) {
   });
 }
 
-function toOpenAIContent(content) {
+function toOpenAIContent(content, stripImages = false) {
   if (!content) return null;
   if (typeof content === "string") return content.trim() || null;
   if (Array.isArray(content)) {
@@ -59,15 +59,18 @@ function toOpenAIContent(content) {
         const t = (block.text || "").trim();
         if (t) parts.push({ type: "text", text: t });
       } else if (block.type === "image") {
-        const src = block.source || {};
-        if (src.type === "base64" && src.data) {
-          const mime = src.media_type || "image/png";
-          parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${src.data}` } });
-        } else if (src.type === "url" && src.url) {
-          parts.push({ type: "image_url", image_url: { url: src.url } });
-        }
-      }
+  if (stripImages) {
+    parts.push({ type: "text", text: "[imagen adjunta]" });
+  } else {
+    const src = block.source || {};
+    if (src.type === "base64" && src.data) {
+      const mime = src.media_type || "image/png";
+      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${src.data}` } });
+    } else if (src.type === "url" && src.url) {
+      parts.push({ type: "image_url", image_url: { url: src.url } });
     }
+  }
+}
     if (parts.length === 0) return null;
     if (parts.length === 1 && parts[0].type === "text") return parts[0].text;
     return parts;
@@ -97,8 +100,8 @@ function flattenForOpenAI(messages, systemPrompt) {
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
-    const isLast = (i === messages.length - 1);
-    let content = isLast && role === "user" ? toOpenAIContent(m.content) : contentToString(m.content);
+    const isGroq = PROVIDER === "groq";
+    let content = isLast && role === "user" ? toOpenAIContent(m.content, isGroq) : contentToString(m.content);
     if (!content) continue;
     if (role === lastRole) {
       const prev = result[result.length - 1];
