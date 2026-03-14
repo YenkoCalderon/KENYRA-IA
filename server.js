@@ -177,10 +177,15 @@ function needsWebSearch(messages) {
   return keywords.some(k => lower.includes(k));
 }
 
-// ─── Búsqueda web con SerpApi (GRATIS 100/mes) ───────────────────────────
+// ─── Búsqueda web con SerpApi ─────────────────────────────────────────────
 async function doWebSearch(query) {
   const apiKey = process.env.SERP_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.log("❌ SERP_API_KEY no está definida en las variables de entorno");
+    return null;
+  }
+
+  console.log(`🔑 Usando SERP_API_KEY: ${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`);
 
   return new Promise((resolve) => {
     const q = encodeURIComponent(query.slice(0, 200));
@@ -195,17 +200,28 @@ async function doWebSearch(query) {
       res.on("data", c => chunks.push(c));
       res.on("end", () => {
         try {
-          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          const raw = Buffer.concat(chunks).toString("utf8");
+          console.log(`🔎 SerpApi [${res.statusCode}]: ${raw.slice(0, 300)}`);
+          const data = JSON.parse(raw);
           const results = (data.organic_results || []).slice(0, 5);
-          if (!results.length) return resolve(null);
+          if (!results.length) {
+            console.log("⚠️ SerpApi no devolvió resultados orgánicos");
+            return resolve(null);
+          }
           const summary = results.map((r, i) =>
             `[${i+1}] ${r.title}\n${r.snippet || ""}\nURL: ${r.link}`
           ).join("\n\n");
           resolve(summary);
-        } catch { resolve(null); }
+        } catch(e) {
+          console.log(`❌ SerpApi parse error: ${e.message}`);
+          resolve(null);
+        }
       });
     });
-    req.on("error", () => resolve(null));
+    req.on("error", (e) => {
+      console.log(`❌ SerpApi network error: ${e.message}`);
+      resolve(null);
+    });
     req.end();
   });
 }
@@ -239,77 +255,78 @@ ${searchResults}
 }
 
 async function callAPI(payload) {
-  return new Promise(async (resolve, reject) => {
-    const rawMessages = payload.messages || [];
-    let systemPrompt = payload.system || "";
-    let hostname, urlPath, headers, body;
+  const rawMessages = payload.messages || [];
+  let systemPrompt = payload.system || "";
+  let hostname, urlPath, headers, body;
 
-    // ── Búsqueda web automática con SerpApi ──────────────────────────────
-    if (needsWebSearch(rawMessages)) {
-      const query = extractLastUserText(rawMessages);
-      console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
-      const searchResults = await doWebSearch(query);
-      if (searchResults) {
-        systemPrompt = injectSearchResults(systemPrompt, searchResults);
-        console.log("✅ Resultados web inyectados en el prompt");
-      } else {
-        const today = new Date().toLocaleDateString("es-ES", {
-          weekday: "long", year: "numeric", month: "long", day: "numeric"
-        });
-        systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real (estadísticas, noticias, precios), indica que no tienes acceso a internet en este momento y que los datos pueden estar desactualizados. NUNCA inventes cifras o estadísticas recientes.`;
-        console.log("⚠️  Sin SERP_API_KEY — fecha inyectada, sin búsqueda web");
-      }
-    }
-
-    if (PROVIDER === "groq") {
-      const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-      const msgs = flattenForOpenAI(rawMessages, systemPrompt);
-      if (!msgs) return reject(new Error("No hay mensajes válidos."));
-      body = JSON.stringify({ model, messages: msgs, max_tokens: 1500, temperature: 0.7 });
-      hostname = "api.groq.com";
-      urlPath  = "/openai/v1/chat/completions";
-      headers  = {
-        "Content-Type":   "application/json",
-        "Authorization":  `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Length": Buffer.byteLength(body),
-      };
-      console.log(`\n→ GROQ [${model}] msgs:${msgs.length} body:${body.length}b`);
-
-    } else if (PROVIDER === "anthropic") {
-      const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
-      const msgs = flattenForAnthropic(rawMessages);
-      if (!msgs) return reject(new Error("No hay mensajes válidos."));
-      const apiPayload = {
-        model, max_tokens: 1500, messages: msgs,
-        tools: [{ type: "web_search_20250305", name: "web_search" }]
-      };
-      if (systemPrompt) apiPayload.system = systemPrompt;
-      body     = JSON.stringify(apiPayload);
-      hostname = "api.anthropic.com";
-      urlPath  = "/v1/messages";
-      headers  = {
-        "Content-Type":      "application/json",
-        "x-api-key":         process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Length":    Buffer.byteLength(body),
-      };
-      console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b`);
-
+  // ── Búsqueda web automática con SerpApi ──────────────────────────────
+  if (needsWebSearch(rawMessages)) {
+    const query = extractLastUserText(rawMessages);
+    console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
+    const searchResults = await doWebSearch(query);
+    if (searchResults) {
+      systemPrompt = injectSearchResults(systemPrompt, searchResults);
+      console.log("✅ Resultados web inyectados en el prompt");
     } else {
-      const model = process.env.OPENAI_MODEL || "gpt-4o";
-      const msgs = flattenForOpenAI(rawMessages, systemPrompt);
-      if (!msgs) return reject(new Error("No hay mensajes válidos."));
-      body     = JSON.stringify({ model, messages: msgs, max_tokens: 1500 });
-      hostname = "api.openai.com";
-      urlPath  = "/v1/chat/completions";
-      headers  = {
-        "Content-Type":   "application/json",
-        "Authorization":  `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Length": Buffer.byteLength(body),
-      };
-      console.log(`\n→ OPENAI [${model}] msgs:${msgs.length} body:${body.length}b`);
+      const today = new Date().toLocaleDateString("es-ES", {
+        weekday: "long", year: "numeric", month: "long", day: "numeric"
+      });
+      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real (estadísticas, noticias, precios), indica que no tienes acceso a internet en este momento y que los datos pueden estar desactualizados. NUNCA inventes cifras o estadísticas recientes.`;
+      console.log("⚠️  Sin resultados web — fecha inyectada");
     }
+  }
 
+  if (PROVIDER === "groq") {
+    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    const msgs = flattenForOpenAI(rawMessages, systemPrompt);
+    if (!msgs) throw new Error("No hay mensajes válidos.");
+    body = JSON.stringify({ model, messages: msgs, max_tokens: 1500, temperature: 0.7 });
+    hostname = "api.groq.com";
+    urlPath  = "/openai/v1/chat/completions";
+    headers  = {
+      "Content-Type":   "application/json",
+      "Authorization":  `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Length": Buffer.byteLength(body),
+    };
+    console.log(`\n→ GROQ [${model}] msgs:${msgs.length} body:${body.length}b`);
+
+  } else if (PROVIDER === "anthropic") {
+    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
+    const msgs = flattenForAnthropic(rawMessages);
+    if (!msgs) throw new Error("No hay mensajes válidos.");
+    const apiPayload = {
+      model, max_tokens: 1500, messages: msgs,
+      tools: [{ type: "web_search_20250305", name: "web_search" }]
+    };
+    if (systemPrompt) apiPayload.system = systemPrompt;
+    body     = JSON.stringify(apiPayload);
+    hostname = "api.anthropic.com";
+    urlPath  = "/v1/messages";
+    headers  = {
+      "Content-Type":      "application/json",
+      "x-api-key":         process.env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta":    "web-search-2025-03-05",
+      "Content-Length":    Buffer.byteLength(body),
+    };
+    console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b`);
+
+  } else {
+    const model = process.env.OPENAI_MODEL || "gpt-4o";
+    const msgs = flattenForOpenAI(rawMessages, systemPrompt);
+    if (!msgs) throw new Error("No hay mensajes válidos.");
+    body     = JSON.stringify({ model, messages: msgs, max_tokens: 1500 });
+    hostname = "api.openai.com";
+    urlPath  = "/v1/chat/completions";
+    headers  = {
+      "Content-Type":   "application/json",
+      "Authorization":  `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Length": Buffer.byteLength(body),
+    };
+    console.log(`\n→ OPENAI [${model}] msgs:${msgs.length} body:${body.length}b`);
+  }
+
+  return new Promise((resolve, reject) => {
     const req = https.request({ hostname, path: urlPath, method: "POST", headers }, res => {
       const chunks = [];
       res.on("data", c => chunks.push(c));
