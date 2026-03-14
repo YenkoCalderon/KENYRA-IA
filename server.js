@@ -148,7 +148,7 @@ function flattenForAnthropic(messages) {
   return result;
 }
 
-// ─── NUEVA FUNCIÓN: Detecta si el mensaje necesita búsqueda web ───────────
+// ─── Detecta si el mensaje necesita búsqueda web ─────────────────────────
 function needsWebSearch(messages) {
   if (!messages || messages.length === 0) return false;
   const last = messages[messages.length - 1];
@@ -169,22 +169,19 @@ function needsWebSearch(messages) {
   return keywords.some(k => lower.includes(k));
 }
 
-// ─── NUEVA FUNCIÓN: Hace búsqueda web real con Brave Search API ──────────
+// ─── Búsqueda web con Google Custom Search API (GRATIS 100/día) ──────────
 async function doWebSearch(query) {
-  const apiKey = process.env.BRAVE_API_KEY;
-  if (!apiKey) return null;
+  const apiKey = process.env.GOOGLE_SEARCH_KEY;
+  const cx     = process.env.GOOGLE_SEARCH_CX;
+  if (!apiKey || !cx) return null;
 
   return new Promise((resolve) => {
     const q = encodeURIComponent(query.slice(0, 200));
     const options = {
-      hostname: "api.search.brave.com",
-      path: `/res/v1/web/search?q=${q}&count=5&country=PE&search_lang=es`,
+      hostname: "www.googleapis.com",
+      path: `/customsearch/v1?key=${apiKey}&cx=${cx}&q=${q}&num=5&lr=lang_es`,
       method: "GET",
-      headers: {
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "X-Subscription-Token": apiKey
-      }
+      headers: { "Accept": "application/json" }
     };
     const req = https.request(options, res => {
       const chunks = [];
@@ -192,10 +189,10 @@ async function doWebSearch(query) {
       res.on("end", () => {
         try {
           const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          const results = (data.web?.results || []).slice(0, 5);
+          const results = (data.items || []).slice(0, 5);
           if (!results.length) return resolve(null);
           const summary = results.map((r, i) =>
-            `[${i+1}] ${r.title}\n${r.description || ""}\nURL: ${r.url}`
+            `[${i+1}] ${r.title}\n${r.snippet || ""}\nURL: ${r.link}`
           ).join("\n\n");
           resolve(summary);
         } catch { resolve(null); }
@@ -206,7 +203,7 @@ async function doWebSearch(query) {
   });
 }
 
-// ─── NUEVA FUNCIÓN: Extrae el texto principal del último mensaje ──────────
+// ─── Extrae el texto del último mensaje ──────────────────────────────────
 function extractLastUserText(messages) {
   if (!messages || messages.length === 0) return "";
   const last = messages[messages.length - 1];
@@ -217,7 +214,7 @@ function extractLastUserText(messages) {
   return "";
 }
 
-// ─── NUEVA FUNCIÓN: Inyecta resultados de búsqueda en el system prompt ───
+// ─── Inyecta resultados de búsqueda en el system prompt ──────────────────
 function injectSearchResults(systemPrompt, searchResults) {
   const today = new Date().toLocaleDateString("es-ES", {
     weekday: "long", year: "numeric", month: "long", day: "numeric"
@@ -228,7 +225,7 @@ function injectSearchResults(systemPrompt, searchResults) {
 🌐 BÚSQUEDA WEB EN TIEMPO REAL
 Fecha actual: ${today}
 
-Los siguientes resultados fueron obtenidos de internet ahora mismo para responder la pregunta del usuario. Úsalos para dar una respuesta actualizada y precisa. Cita las fuentes cuando sea relevante.
+Los siguientes resultados fueron obtenidos de internet ahora mismo. Úsalos para dar una respuesta actualizada y precisa. Cita las fuentes cuando sea relevante.
 
 ${searchResults}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
@@ -240,21 +237,20 @@ async function callAPI(payload) {
     let systemPrompt = payload.system || "";
     let hostname, urlPath, headers, body;
 
-    // ── Búsqueda web automática (si hay BRAVE_API_KEY configurada) ─────────
+    // ── Búsqueda web automática con Google Custom Search ─────────────────
     if (needsWebSearch(rawMessages)) {
       const query = extractLastUserText(rawMessages);
-      console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
+      console.log(`🔍 Buscando en Google: "${query.slice(0, 80)}..."`);
       const searchResults = await doWebSearch(query);
       if (searchResults) {
         systemPrompt = injectSearchResults(systemPrompt, searchResults);
-        console.log("✅ Resultados web inyectados en el prompt");
+        console.log("✅ Resultados de Google inyectados en el prompt");
       } else {
-        // Sin Brave API Key: inyectar fecha actual para que el modelo sea consciente
         const today = new Date().toLocaleDateString("es-ES", {
           weekday: "long", year: "numeric", month: "long", day: "numeric"
         });
         systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real (estadísticas, noticias, precios), indica que no tienes acceso a internet en este momento y que los datos pueden estar desactualizados. NUNCA inventes cifras o estadísticas recientes.`;
-        console.log("⚠️  Sin BRAVE_API_KEY — fecha inyectada, sin búsqueda web");
+        console.log("⚠️  Sin GOOGLE_SEARCH_KEY/CX — fecha inyectada, sin búsqueda web");
       }
     }
 
@@ -276,12 +272,8 @@ async function callAPI(payload) {
       const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
       const msgs = flattenForAnthropic(rawMessages);
       if (!msgs) return reject(new Error("No hay mensajes válidos."));
-
       const apiPayload = {
-        model,
-        max_tokens: 1500,
-        messages: msgs,
-        // ── Web Search nativo de Anthropic ────────────────────────────────
+        model, max_tokens: 1500, messages: msgs,
         tools: [{ type: "web_search_20250305", name: "web_search" }]
       };
       if (systemPrompt) apiPayload.system = systemPrompt;
@@ -294,7 +286,7 @@ async function callAPI(payload) {
         "anthropic-version": "2023-06-01",
         "Content-Length":    Buffer.byteLength(body),
       };
-      console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b (web_search activo)`);
+      console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b`);
 
     } else {
       const model = process.env.OPENAI_MODEL || "gpt-4o";
@@ -335,13 +327,10 @@ function normalizeResponse(raw, status) {
         return JSON.stringify({ content: [{ type: "text", text: "Error API: " + msg }] });
       } catch { return raw; }
     }
-    // ── Extraer solo bloques de texto (ignorar tool_use y tool_result) ────
     try {
       const data = JSON.parse(raw);
       const textBlocks = (data.content || []).filter(b => b.type === "text");
-      if (textBlocks.length > 0) {
-        return JSON.stringify({ content: textBlocks });
-      }
+      if (textBlocks.length > 0) return JSON.stringify({ content: textBlocks });
       return raw;
     } catch { return raw; }
   }
@@ -402,7 +391,7 @@ server.listen(PORT, () => {
   console.log("╠══════════════════════════════════════╣");
   console.log(`║  Puerto:    ${PORT}                      ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(26)}║`);
-  console.log(`║  Web Search: ${process.env.BRAVE_API_KEY ? "✅ Brave API" : "⚠️  Sin Brave API Key"}        ║`);
+  console.log(`║  Web Search: ${(process.env.GOOGLE_SEARCH_KEY && process.env.GOOGLE_SEARCH_CX) ? "✅ Google Search API " : "⚠️  Sin Google API Key"}  ║`);
   console.log("╚══════════════════════════════════════╝\n");
 });
 
