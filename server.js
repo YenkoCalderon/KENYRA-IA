@@ -26,6 +26,7 @@ const STATIC   = __dirname;
 const GROQ_TEXT_MODEL   = process.env.GROQ_MODEL        || "llama-3.3-70b-versatile";
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
 const GEMINI_MODEL      = process.env.GEMINI_MODEL      || "gemini-2.0-flash";
+const OPENROUTER_MODEL  = process.env.OPENROUTER_MODEL  || "google/gemini-2.0-flash-exp:free";
 
 function messageHasImage(messages) {
   if (!messages || messages.length === 0) return false;
@@ -34,17 +35,19 @@ function messageHasImage(messages) {
 }
 
 console.log("🔧 Variables de entorno detectadas:");
-console.log("   PORT             :", process.env.PORT             || "❌ no definida");
-console.log("   AI_PROVIDER      :", process.env.AI_PROVIDER      || "❌ no definida");
-console.log("   GEMINI_API_KEY   :", process.env.GEMINI_API_KEY   ? "✅ existe" : "❌ no definida");
-console.log("   GEMINI_MODEL     :", GEMINI_MODEL);
-console.log("   OPENAI_API_KEY   :", process.env.OPENAI_API_KEY   ? "✅ existe" : "❌ no definida");
-console.log("   OPENAI_MODEL     :", process.env.OPENAI_MODEL     || "gpt-4o (default)");
-console.log("   GROQ_API_KEY     :", process.env.GROQ_API_KEY     ? "✅ existe" : "❌ no definida");
-console.log("   GROQ_MODEL       :", GROQ_TEXT_MODEL);
-console.log("   GROQ_VISION_MODEL:", GROQ_VISION_MODEL);
-console.log("   ANTHROPIC_API_KEY:", process.env.ANTHROPIC_API_KEY ? "✅ existe" : "❌ no definida");
-console.log("   TAVILY_API_KEY   :", process.env.TAVILY_API_KEY   ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
+console.log("   PORT               :", process.env.PORT               || "❌ no definida");
+console.log("   AI_PROVIDER        :", process.env.AI_PROVIDER        || "❌ no definida");
+console.log("   OPENROUTER_API_KEY :", process.env.OPENROUTER_API_KEY ? "✅ existe" : "❌ no definida");
+console.log("   OPENROUTER_MODEL   :", OPENROUTER_MODEL);
+console.log("   GEMINI_API_KEY     :", process.env.GEMINI_API_KEY     ? "✅ existe" : "❌ no definida");
+console.log("   GEMINI_MODEL       :", GEMINI_MODEL);
+console.log("   OPENAI_API_KEY     :", process.env.OPENAI_API_KEY     ? "✅ existe" : "❌ no definida");
+console.log("   OPENAI_MODEL       :", process.env.OPENAI_MODEL       || "gpt-4o (default)");
+console.log("   GROQ_API_KEY       :", process.env.GROQ_API_KEY       ? "✅ existe" : "❌ no definida");
+console.log("   GROQ_MODEL         :", GROQ_TEXT_MODEL);
+console.log("   GROQ_VISION_MODEL  :", GROQ_VISION_MODEL);
+console.log("   ANTHROPIC_API_KEY  :", process.env.ANTHROPIC_API_KEY  ? "✅ existe" : "❌ no definida");
+console.log("   TAVILY_API_KEY     :", process.env.TAVILY_API_KEY     ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -64,59 +67,7 @@ function readBody(req) {
   });
 }
 
-// ─── Convierte mensajes al formato Gemini ────────────────────────────────
-function toGeminiMessages(messages, systemPrompt) {
-  const contents = [];
-
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    const role = m.role === "assistant" ? "model" : "user";
-    const isLast = (i === messages.length - 1);
-    const parts = [];
-
-    // Agregar system prompt solo en el primer mensaje de usuario
-    if (i === 0 && systemPrompt && role === "user") {
-      parts.push({ text: systemPrompt + "\n\n" });
-    }
-
-    if (typeof m.content === "string") {
-      if (m.content.trim()) parts.push({ text: m.content.trim() });
-    } else if (Array.isArray(m.content)) {
-      for (const block of m.content) {
-        if (!block || !block.type) continue;
-        if (block.type === "text" && block.text?.trim()) {
-          parts.push({ text: block.text.trim() });
-        } else if (block.type === "image" && isLast) {
-          const src = block.source || {};
-          if (src.type === "base64" && src.data) {
-            parts.push({
-              inlineData: {
-                mimeType: src.media_type || "image/png",
-                data: src.data
-              }
-            });
-          }
-        }
-      }
-    }
-
-    if (parts.length === 0) continue;
-
-    // Gemini no acepta dos mensajes seguidos del mismo rol
-    if (contents.length > 0 && contents[contents.length - 1].role === role) {
-      contents[contents.length - 1].parts.push(...parts);
-    } else {
-      contents.push({ role, parts });
-    }
-  }
-
-  // Gemini requiere que el primer mensaje sea "user"
-  while (contents.length > 0 && contents[0].role !== "user") contents.shift();
-  if (contents.length === 0) return null;
-  return contents;
-}
-
-// ─── Convierte content al formato OpenAI ─────────────────────────────────
+// ─── Convierte content al formato OpenAI/OpenRouter ──────────────────────
 function toOpenAIContent(content, stripImages = false) {
   if (!content) return null;
   if (typeof content === "string") return content.trim() || null;
@@ -194,6 +145,44 @@ function flattenForOpenAI(messages, systemPrompt, useVision = true) {
   const hasUser = result.some(m => m.role === "user");
   if (!hasUser) return null;
   return result;
+}
+
+// ─── Convierte mensajes al formato Gemini ────────────────────────────────
+function toGeminiMessages(messages, systemPrompt) {
+  const contents = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    const role = m.role === "assistant" ? "model" : "user";
+    const isLast = (i === messages.length - 1);
+    const parts = [];
+    if (i === 0 && systemPrompt && role === "user") {
+      parts.push({ text: systemPrompt + "\n\n" });
+    }
+    if (typeof m.content === "string") {
+      if (m.content.trim()) parts.push({ text: m.content.trim() });
+    } else if (Array.isArray(m.content)) {
+      for (const block of m.content) {
+        if (!block || !block.type) continue;
+        if (block.type === "text" && block.text?.trim()) {
+          parts.push({ text: block.text.trim() });
+        } else if (block.type === "image" && isLast) {
+          const src = block.source || {};
+          if (src.type === "base64" && src.data) {
+            parts.push({ inlineData: { mimeType: src.media_type || "image/png", data: src.data } });
+          }
+        }
+      }
+    }
+    if (parts.length === 0) continue;
+    if (contents.length > 0 && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts.push(...parts);
+    } else {
+      contents.push({ role, parts });
+    }
+  }
+  while (contents.length > 0 && contents[0].role !== "user") contents.shift();
+  if (contents.length === 0) return null;
+  return contents;
 }
 
 function flattenForAnthropic(messages) {
@@ -362,23 +351,37 @@ async function callAPI(payload) {
     }
   }
 
-  // ── GEMINI ────────────────────────────────────────────────────────────────
-  if (PROVIDER === "gemini") {
-    const model   = GEMINI_MODEL;
-    const apiKey  = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY no definida");
-
-    const contents = toGeminiMessages(rawMessages, systemPrompt);
-    if (!contents) throw new Error("No hay mensajes válidos.");
-
-    const geminiPayload = { contents, generationConfig: { maxOutputTokens: 4000, temperature: 0.3 } };
-    body     = JSON.stringify(geminiPayload);
-    hostname = "generativelanguage.googleapis.com";
-    urlPath  = `/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  // ── OPENROUTER ────────────────────────────────────────────────────────────
+  if (PROVIDER === "openrouter") {
+    const model  = OPENROUTER_MODEL;
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY no definida");
+    // OpenRouter acepta el mismo formato que OpenAI con visión
+    const msgs = flattenForOpenAI(rawMessages, systemPrompt, true);
+    if (!msgs) throw new Error("No hay mensajes válidos.");
+    body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000, temperature: 0.3 });
+    hostname = "openrouter.ai";
+    urlPath  = "/api/v1/chat/completions";
     headers  = {
       "Content-Type":   "application/json",
+      "Authorization":  `Bearer ${apiKey}`,
+      "HTTP-Referer":   "https://kenyra.ia",
+      "X-Title":        "Kenyra IA",
       "Content-Length": Buffer.byteLength(body),
     };
+    console.log(`\n→ OPENROUTER [${model}] msgs:${msgs.length} body:${body.length}b`);
+
+  // ── GEMINI ────────────────────────────────────────────────────────────────
+  } else if (PROVIDER === "gemini") {
+    const model  = GEMINI_MODEL;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY no definida");
+    const contents = toGeminiMessages(rawMessages, systemPrompt);
+    if (!contents) throw new Error("No hay mensajes válidos.");
+    body     = JSON.stringify({ contents, generationConfig: { maxOutputTokens: 4000, temperature: 0.3 } });
+    hostname = "generativelanguage.googleapis.com";
+    urlPath  = `/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    headers  = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) };
     console.log(`\n→ GEMINI [${model}] msgs:${contents.length} body:${body.length}b`);
 
   // ── OPENAI ────────────────────────────────────────────────────────────────
@@ -460,11 +463,9 @@ function normalizeResponse(raw, status) {
     try {
       const data = JSON.parse(raw);
       if (status !== 200) {
-        const msg = data.error?.message || raw.slice(0, 200);
-        return JSON.stringify({ content: [{ type: "text", text: "Error API: " + msg }] });
+        return JSON.stringify({ content: [{ type: "text", text: "Error API: " + (data.error?.message || raw.slice(0,200)) }] });
       }
-      const text = data.candidates?.[0]?.content?.parts
-        ?.filter(p => p.text)?.map(p => p.text)?.join("") || "";
+      const text = data.candidates?.[0]?.content?.parts?.filter(p => p.text)?.map(p => p.text)?.join("") || "";
       return JSON.stringify({ content: [{ type: "text", text }] });
     } catch {
       return JSON.stringify({ content: [{ type: "text", text: "Error al parsear respuesta Gemini." }] });
@@ -485,7 +486,7 @@ function normalizeResponse(raw, status) {
       return raw;
     } catch { return raw; }
   }
-  // ── OpenAI / Groq ──
+  // ── OpenRouter / OpenAI / Groq ──
   try {
     const data = JSON.parse(raw);
     if (status !== 200) {
@@ -538,26 +539,29 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log("\n╔══════════════════════════════════════════════╗");
-  console.log("║         🤖  KENYRA IA  🤖                    ║");
-  console.log("╠══════════════════════════════════════════════╣");
-  console.log(`║  Puerto:    ${PORT}                               ║`);
-  console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(33)}║`);
-  if (PROVIDER === "gemini") {
-    console.log(`║  Modelo:    ${GEMINI_MODEL.padEnd(33)}║`);
-    console.log(`║  Vision:    ✅ nativa (Gemini)               ║`);
+  console.log("\n╔══════════════════════════════════════════════════╗");
+  console.log("║           🤖  KENYRA IA  🤖                      ║");
+  console.log("╠══════════════════════════════════════════════════╣");
+  console.log(`║  Puerto:    ${PORT}                                   ║`);
+  console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(37)}║`);
+  if (PROVIDER === "openrouter") {
+    console.log(`║  Modelo:    ${OPENROUTER_MODEL.slice(0,37).padEnd(37)}║`);
+    console.log(`║  Vision:    ✅ nativa (OpenRouter)               ║`);
+  } else if (PROVIDER === "gemini") {
+    console.log(`║  Modelo:    ${GEMINI_MODEL.padEnd(37)}║`);
+    console.log(`║  Vision:    ✅ nativa (Gemini)                   ║`);
   } else if (PROVIDER === "openai") {
-    console.log(`║  Modelo:    ${(process.env.OPENAI_MODEL||"gpt-4o").padEnd(33)}║`);
-    console.log(`║  Vision:    ✅ nativa (GPT-4o)               ║`);
+    console.log(`║  Modelo:    ${(process.env.OPENAI_MODEL||"gpt-4o").padEnd(37)}║`);
+    console.log(`║  Vision:    ✅ nativa (GPT-4o)                   ║`);
   } else if (PROVIDER === "groq") {
-    console.log(`║  Texto:     ${GROQ_TEXT_MODEL.padEnd(33)}║`);
-    console.log(`║  Vision:    ${GROQ_VISION_MODEL.slice(0,33).padEnd(33)}║`);
+    console.log(`║  Texto:     ${GROQ_TEXT_MODEL.padEnd(37)}║`);
+    console.log(`║  Vision:    ${GROQ_VISION_MODEL.slice(0,37).padEnd(37)}║`);
   } else if (PROVIDER === "anthropic") {
-    console.log(`║  Modelo:    ${(process.env.ANTHROPIC_MODEL||"claude-sonnet").padEnd(33)}║`);
-    console.log(`║  Vision:    ✅ nativa (Anthropic)            ║`);
+    console.log(`║  Modelo:    ${(process.env.ANTHROPIC_MODEL||"claude-sonnet").padEnd(37)}║`);
+    console.log(`║  Vision:    ✅ nativa (Anthropic)                ║`);
   }
-  console.log(`║  Tavily:    ${process.env.TAVILY_API_KEY ? "✅ activo" : "⚠️  no configurado"}                    ║`);
-  console.log("╚══════════════════════════════════════════════╝\n");
+  console.log(`║  Tavily:    ${process.env.TAVILY_API_KEY ? "✅ activo" : "⚠️  no configurado"}                        ║`);
+  console.log("╚══════════════════════════════════════════════════╝\n");
 });
 
 server.on("error", err => {
