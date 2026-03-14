@@ -185,16 +185,20 @@ function needsWebSearch(messages) {
   return keywords.some(k => lower.includes(k));
 }
 
-// ─── Detecta si necesita lista completa (Wikipedia) ──────────────────────
+// ─── Detecta si es consulta de Tokusatsu ─────────────────────────────────
+function isTokusatsuQuery(text) {
+  const lower = text.toLowerCase();
+  return ["sentai", "kamen rider", "ultraman", "power rangers", "tokusatsu",
+          "gorenger", "zyuranger", "gokaiger", "ryusoulger", "donbrothers",
+          "king-ohger", "boonboomger", "gozyuger", "shadowrangers"].some(k => lower.includes(k));
+}
+
+// ─── Detecta si necesita lista completa ──────────────────────────────────
 function needsFullList(text) {
   const lower = text.toLowerCase();
-  const listKeywords = [
-    "todos los", "todas las", "lista completa", "dame todos", "dame todas",
-    "enumera", "lista de", "cuántos hay", "cuantos hay",
-    "sentai", "kamen rider", "ultraman", "power rangers",
-    "todos hasta", "todas hasta", "hasta el 2026", "hasta 2026"
-  ];
-  return listKeywords.some(k => lower.includes(k));
+  return ["todos los", "todas las", "lista completa", "dame todos", "dame todas",
+          "enumera", "lista de", "cuántos hay", "cuantos hay",
+          "todos hasta", "todas hasta", "hasta el 2026", "hasta 2026"].some(k => lower.includes(k));
 }
 
 // ─── Fetch contenido de Wikipedia via API ────────────────────────────────
@@ -252,6 +256,39 @@ async function fetchWikipedia(query) {
   });
 }
 
+// ─── Fetch RangerWiki Fandom via SerpApi ─────────────────────────────────
+async function fetchRangerWiki(query) {
+  const apiKey = process.env.SERP_API_KEY;
+  if (!apiKey) return null;
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(query.slice(0, 150) + " site:powerrangers.fandom.com OR site:shadowrangers.live");
+    const options = {
+      hostname: "serpapi.com",
+      path: `/search.json?q=${q}&api_key=${apiKey}&hl=es&gl=pe&num=5`,
+      method: "GET",
+      headers: { "Accept": "application/json" }
+    };
+    const req = https.request(options, res => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          const results = (data.organic_results || []).slice(0, 5);
+          if (!results.length) return resolve(null);
+          const summary = results.map((r, i) =>
+            `[${i+1}] ${r.title}\n${r.snippet || ""}`
+          ).join("\n\n");
+          console.log(`🦸 RangerWiki/ShadowRangers: ${results.length} resultados`);
+          resolve(summary);
+        } catch(e) { resolve(null); }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
+
 // ─── Búsqueda web con SerpApi ─────────────────────────────────────────────
 async function doWebSearch(query) {
   const apiKey = process.env.SERP_API_KEY;
@@ -262,9 +299,25 @@ async function doWebSearch(query) {
 
   console.log(`🔑 Usando SERP_API_KEY: ${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`);
 
-  // Si necesita lista completa, usar Wikipedia directamente
+  // 1. Si es Tokusatsu → RangerWiki + ShadowRangers primero
+  if (isTokusatsuQuery(query)) {
+    console.log("🦸 Consulta Tokusatsu — buscando en RangerWiki/ShadowRangers...");
+    const fandomResult = await fetchRangerWiki(query);
+    if (fandomResult) {
+      // También combinar con Wikipedia para listas completas
+      if (needsFullList(query)) {
+        const wikiResult = await fetchWikipedia(query);
+        if (wikiResult) {
+          return fandomResult + "\n\n" + wikiResult;
+        }
+      }
+      return fandomResult;
+    }
+  }
+
+  // 2. Si necesita lista completa → Wikipedia
   if (needsFullList(query)) {
-    console.log("📖 Detectada solicitud de lista completa — buscando en Wikipedia...");
+    console.log("📖 Solicitud de lista completa — buscando en Wikipedia...");
     const wikiResult = await fetchWikipedia(query);
     if (wikiResult) {
       console.log("✅ Contenido Wikipedia obtenido");
@@ -273,6 +326,7 @@ async function doWebSearch(query) {
     console.log("⚠️ Wikipedia no encontró resultados, usando SerpApi...");
   }
 
+  // 3. Búsqueda normal con SerpApi
   return new Promise((resolve) => {
     const q = encodeURIComponent(query.slice(0, 200));
     const options = {
@@ -295,7 +349,7 @@ async function doWebSearch(query) {
             return resolve(null);
           }
           const summary = results.map((r, i) =>
-            `[${i+1}] ${r.title}\n${r.snippet || ""}\nURL: ${r.link}`
+            `[${i+1}] ${r.title}\n${r.snippet || ""}`
           ).join("\n\n");
           resolve(summary);
         } catch(e) {
