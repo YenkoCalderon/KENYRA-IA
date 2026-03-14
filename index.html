@@ -745,6 +745,7 @@ function md(raw){
   let t=raw;
   const codes=[];   // bloques de código
   const maths=[];   // bloques de matemáticas
+  t=t.replace(/\[\d+\]/g,'');
 
   // 1. Proteger descargas
   t=t.replace(/\[DOWNLOAD:([^\]]+)\]/g,(_,fn)=>'\x01DL:'+fn+'\x01');
