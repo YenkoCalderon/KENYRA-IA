@@ -731,7 +731,7 @@ async function sendMsg(){
     const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:SYS,messages:apiMessages})});
     if(!res.ok){let errMsg='HTTP '+res.status;try{const e=await res.json();errMsg=e.error?.message||e.error||errMsg;}catch{}throw new Error(errMsg);}
     const data=await res.json();
-    const reply=(data.content&&data.content[0]&&data.content[0].text)||'Sin respuesta.';
+    const reply=((data.content&&data.content[0]&&data.content[0].text)||'Sin respuesta.').replace(/\[\d+\]/g,'');
     hideTyping(tid);ch.messages.push({role:'agent',text:reply});ch.history.push({role:'assistant',content:reply});saveChat(chatId,ch);addMsg('agent',reply);
   }catch(err){hideTyping(tid);addMsg('agent','⚠️ Error: '+err.message);}
   loading=false;document.getElementById('sendBtn').disabled=false;document.getElementById('chatInput').focus();
