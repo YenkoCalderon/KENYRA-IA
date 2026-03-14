@@ -23,12 +23,18 @@ const PORT     = process.env.PORT || 3000;
 const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
+// Modelos que soportan visión — NO se les quitan las imágenes
+const VISION_KEYWORDS = ["vision", "llama-4", "llava", "gpt-4o", "gpt-4-turbo"];
+const modelName = (process.env.GROQ_MODEL || process.env.OPENAI_MODEL || "").toLowerCase();
+const SUPPORTS_VISION = VISION_KEYWORDS.some(v => modelName.includes(v));
+
 console.log("🔧 Variables de entorno detectadas:");
 console.log("   PORT        :", process.env.PORT        || "❌ no definida");
 console.log("   AI_PROVIDER :", process.env.AI_PROVIDER || "❌ no definida");
 console.log("   GROQ_API_KEY:", process.env.GROQ_API_KEY  ? "✅ existe" : "❌ no definida");
 console.log("   GROQ_MODEL  :", process.env.GROQ_MODEL   || "❌ no definida");
 console.log("   TAVILY_API_KEY:", process.env.TAVILY_API_KEY ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
+console.log("   VISION      :", SUPPORTS_VISION ? "✅ activado" : "⚠️  sin visión (cambia GROQ_MODEL a llama-4-scout)");
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -49,7 +55,6 @@ function readBody(req) {
 }
 
 // ─── Convierte content al formato OpenAI ─────────────────────────────────
-// stripImages=true cuando el proveedor no soporta visión (ej: Groq)
 function toOpenAIContent(content, stripImages = false) {
   if (!content) return null;
   if (typeof content === "string") return content.trim() || null;
@@ -62,8 +67,7 @@ function toOpenAIContent(content, stripImages = false) {
         if (t) parts.push({ type: "text", text: t });
       } else if (block.type === "image") {
         if (stripImages) {
-          // Groq no soporta visión — convertir imagen a texto descriptivo
-          parts.push({ type: "text", text: "[imagen adjunta]" });
+          parts.push({ type: "text", text: "[imagen adjunta — este modelo no soporta visión]" });
         } else {
           const src = block.source || {};
           if (src.type === "base64" && src.data) {
@@ -105,8 +109,10 @@ function flattenForOpenAI(messages, systemPrompt) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
     const isLast = (i === messages.length - 1);
-    const isGroq = PROVIDER === "groq";
-    let content = isLast && role === "user" ? toOpenAIContent(m.content, isGroq) : contentToString(m.content);
+    const stripImages = !SUPPORTS_VISION;
+    let content = isLast && role === "user"
+      ? toOpenAIContent(m.content, stripImages)
+      : contentToString(m.content);
     if (!content) continue;
     if (role === lastRole) {
       const prev = result[result.length - 1];
@@ -139,7 +145,6 @@ function flattenForAnthropic(messages) {
     if (!content) continue;
 
     if (isLast && role === "user") {
-      // Último mensaje de usuario: puede tener imagen + texto como array
       if (Array.isArray(content)) {
         const blocks = content.filter(b => {
           if (!b || !b.type) return false;
@@ -156,7 +161,6 @@ function flattenForAnthropic(messages) {
         if (!content) continue;
       }
     } else {
-      // Mensajes anteriores: SIEMPRE string (Anthropic no acepta arrays aquí)
       if (typeof content === "string") {
         content = content.trim();
         if (!content) continue;
@@ -352,7 +356,7 @@ async function callAPI(payload) {
       "Authorization":  `Bearer ${process.env.GROQ_API_KEY}`,
       "Content-Length": Buffer.byteLength(body),
     };
-    console.log(`\n→ GROQ [${model}] msgs:${msgs.length} body:${body.length}b`);
+    console.log(`\n→ GROQ [${model}] msgs:${msgs.length} vision:${SUPPORTS_VISION} body:${body.length}b`);
 
   } else if (PROVIDER === "anthropic") {
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
@@ -479,6 +483,7 @@ server.listen(PORT, () => {
   console.log("╠══════════════════════════════════════╣");
   console.log(`║  Puerto:    ${PORT}                      ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(26)}║`);
+  console.log(`║  Vision:    ${SUPPORTS_VISION ? "✅ activado              " : "⚠️  sin visión           "}║`);
   console.log(`║  Web Search: ${process.env.TAVILY_API_KEY ? "✅ Tavily activo         " : "⚠️  Sin TAVILY_API_KEY   "}║`);
   console.log("╚══════════════════════════════════════╝\n");
 });
