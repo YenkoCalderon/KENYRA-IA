@@ -48,6 +48,8 @@ function readBody(req) {
   });
 }
 
+// ─── Convierte content al formato OpenAI ─────────────────────────────────
+// stripImages=true cuando el proveedor no soporta visión (ej: Groq)
 function toOpenAIContent(content, stripImages = false) {
   if (!content) return null;
   if (typeof content === "string") return content.trim() || null;
@@ -59,18 +61,20 @@ function toOpenAIContent(content, stripImages = false) {
         const t = (block.text || "").trim();
         if (t) parts.push({ type: "text", text: t });
       } else if (block.type === "image") {
-  if (stripImages) {
-    parts.push({ type: "text", text: "[imagen adjunta]" });
-  } else {
-    const src = block.source || {};
-    if (src.type === "base64" && src.data) {
-      const mime = src.media_type || "image/png";
-      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${src.data}` } });
-    } else if (src.type === "url" && src.url) {
-      parts.push({ type: "image_url", image_url: { url: src.url } });
+        if (stripImages) {
+          // Groq no soporta visión — convertir imagen a texto descriptivo
+          parts.push({ type: "text", text: "[imagen adjunta]" });
+        } else {
+          const src = block.source || {};
+          if (src.type === "base64" && src.data) {
+            const mime = src.media_type || "image/png";
+            parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${src.data}` } });
+          } else if (src.type === "url" && src.url) {
+            parts.push({ type: "image_url", image_url: { url: src.url } });
+          }
+        }
+      }
     }
-  }
-}
     if (parts.length === 0) return null;
     if (parts.length === 1 && parts[0].type === "text") return parts[0].text;
     return parts;
@@ -100,6 +104,7 @@ function flattenForOpenAI(messages, systemPrompt) {
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
+    const isLast = (i === messages.length - 1);
     const isGroq = PROVIDER === "groq";
     let content = isLast && role === "user" ? toOpenAIContent(m.content, isGroq) : contentToString(m.content);
     if (!content) continue;
@@ -134,7 +139,7 @@ function flattenForAnthropic(messages) {
     if (!content) continue;
 
     if (isLast && role === "user") {
-      // ✅ Último mensaje de usuario: puede tener imagen + texto como array
+      // Último mensaje de usuario: puede tener imagen + texto como array
       if (Array.isArray(content)) {
         const blocks = content.filter(b => {
           if (!b || !b.type) return false;
@@ -143,7 +148,6 @@ function flattenForAnthropic(messages) {
           return false;
         });
         if (blocks.length === 0) continue;
-        // Si solo hay texto, string. Si hay imagen, array.
         content = blocks.every(b => b.type === "text")
           ? blocks.map(b => b.text.trim()).join("\n")
           : blocks;
@@ -152,12 +156,11 @@ function flattenForAnthropic(messages) {
         if (!content) continue;
       }
     } else {
-      // ✅ Mensajes anteriores: SIEMPRE string (Anthropic no acepta arrays aquí)
+      // Mensajes anteriores: SIEMPRE string (Anthropic no acepta arrays aquí)
       if (typeof content === "string") {
         content = content.trim();
         if (!content) continue;
       } else if (Array.isArray(content)) {
-        // Extraer solo texto, descartar imágenes
         const text = content
           .filter(b => b && b.type === "text" && b.text?.trim())
           .map(b => b.text.trim())
@@ -270,12 +273,10 @@ async function doTavilySearch(query) {
 
           let result = "";
 
-          // Respuesta directa de Tavily (muy útil)
           if (data.answer) {
             result += `Respuesta directa: ${data.answer}\n\n`;
           }
 
-          // Resultados con contenido completo
           if (data.results && data.results.length > 0) {
             result += data.results.map((r, i) =>
               `[${i+1}] ${r.title}\n${r.content || r.snippet || ""}`
