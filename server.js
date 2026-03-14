@@ -41,18 +41,9 @@ function readBody(req) {
   });
 }
 
-// Convert Anthropic-style content to OpenAI vision format
-// Anthropic: {type:"image", source:{type:"base64", media_type:"image/png", data:"..."}}
-// OpenAI:    {type:"image_url", image_url:{url:"data:image/png;base64,..."}}
 function toOpenAIContent(content) {
   if (!content) return null;
-
-  // Plain string
-  if (typeof content === "string") {
-    return content.trim() || null;
-  }
-
-  // Array of blocks
+  if (typeof content === "string") return content.trim() || null;
   if (Array.isArray(content)) {
     const parts = [];
     for (const block of content) {
@@ -61,34 +52,26 @@ function toOpenAIContent(content) {
         const t = (block.text || "").trim();
         if (t) parts.push({ type: "text", text: t });
       } else if (block.type === "image") {
-        // Convert Anthropic image block → OpenAI image_url block
         const src = block.source || {};
         if (src.type === "base64" && src.data) {
           const mime = src.media_type || "image/png";
-          parts.push({
-            type: "image_url",
-            image_url: { url: `data:${mime};base64,${src.data}` }
-          });
+          parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${src.data}` } });
         } else if (src.type === "url" && src.url) {
           parts.push({ type: "image_url", image_url: { url: src.url } });
         }
       }
     }
     if (parts.length === 0) return null;
-    // If only one text part, return as plain string (simpler)
     if (parts.length === 1 && parts[0].type === "text") return parts[0].text;
     return parts;
   }
-
   return String(content).trim() || null;
 }
 
-// Flatten to plain string (for history messages that had images — strip them)
 function contentToString(content) {
   if (!content) return null;
   if (typeof content === "string") return content.trim() || null;
   if (Array.isArray(content)) {
-    // For past history messages: extract text only, replace images with placeholder
     const parts = [];
     for (const b of content) {
       if (!b) continue;
@@ -100,41 +83,22 @@ function contentToString(content) {
   return String(content).trim() || null;
 }
 
-// Build Groq/OpenAI messages array
-// - History messages: plain strings (no images to save tokens)
-// - Current (last) user message: full vision content with images
 function flattenForOpenAI(messages, systemPrompt) {
   const result = [];
   if (systemPrompt) result.push({ role: "system", content: systemPrompt });
-
   let lastRole = "system";
-
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
     const isLast = (i === messages.length - 1);
-
-    let content;
-    if (isLast && role === "user") {
-      // Last user message: keep images in OpenAI vision format
-      content = toOpenAIContent(m.content);
-    } else {
-      // History: plain strings only
-      content = contentToString(m.content);
-    }
-
+    let content = isLast && role === "user" ? toOpenAIContent(m.content) : contentToString(m.content);
     if (!content) continue;
-
     if (role === lastRole) {
-      // Merge same-role consecutive messages
       const prev = result[result.length - 1];
       if (typeof prev.content === "string" && typeof content === "string") {
         prev.content += "\n" + content;
       } else {
-        // Convert both to arrays and merge
-        const toArr = c => typeof c === "string"
-          ? [{ type: "text", text: c }]
-          : (Array.isArray(c) ? c : [{ type: "text", text: String(c) }]);
+        const toArr = c => typeof c === "string" ? [{ type: "text", text: c }] : (Array.isArray(c) ? c : [{ type: "text", text: String(c) }]);
         prev.content = [...toArr(prev.content), ...toArr(content)];
       }
     } else {
@@ -142,21 +106,17 @@ function flattenForOpenAI(messages, systemPrompt) {
       lastRole = role;
     }
   }
-
   const hasUser = result.some(m => m.role === "user");
   if (!hasUser) return null;
   return result;
 }
 
-// For Anthropic: keep native image blocks, ensure alternation
 function flattenForAnthropic(messages) {
   const result = [];
   let lastRole = null;
-
   for (const m of messages) {
     const role = m.role === "assistant" ? "assistant" : "user";
     let content = m.content;
-
     if (!content) continue;
     if (typeof content === "string") {
       content = content.trim();
@@ -169,41 +129,139 @@ function flattenForAnthropic(messages) {
         return false;
       });
       if (content.length === 0) continue;
-      if (content.every(b => b.type === "text")) {
-        content = content.map(b => b.text).join("\n");
-      }
+      if (content.every(b => b.type === "text")) content = content.map(b => b.text).join("\n");
     } else {
       content = String(content).trim();
       if (!content) continue;
     }
-
     if (role === lastRole) {
       const prev = result[result.length - 1];
-      const toStr = c => typeof c === "string" ? c
-        : c.filter(b => b.type === "text").map(b => b.text).join("\n");
+      const toStr = c => typeof c === "string" ? c : c.filter(b => b.type === "text").map(b => b.text).join("\n");
       prev.content = toStr(prev.content) + "\n" + toStr(content);
     } else {
       result.push({ role, content });
       lastRole = role;
     }
   }
-
   while (result.length > 0 && result[0].role !== "user") result.shift();
   if (result.length === 0) return null;
   return result;
 }
 
-function callAPI(payload) {
-  return new Promise((resolve, reject) => {
+// ─── NUEVA FUNCIÓN: Detecta si el mensaje necesita búsqueda web ───────────
+function needsWebSearch(messages) {
+  if (!messages || messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  const text = typeof last.content === "string"
+    ? last.content
+    : (Array.isArray(last.content) ? last.content.filter(b => b.type === "text").map(b => b.text).join(" ") : "");
+  const keywords = [
+    "actualidad", "actual", "ahora", "hoy", "2025", "2026", "2027",
+    "noticia", "noticias", "último", "ultima", "últimas", "ultimas",
+    "reciente", "recientes", "precio", "cotización", "dolar", "bitcoin",
+    "gol", "goles", "partido", "resultado", "campeón", "campeon",
+    "presidente", "elección", "elecciones", "guerra", "crisis",
+    "lanzó", "lanzamiento", "estreno", "nuevo modelo", "nueva version",
+    "cuánto va", "cuanto va", "quién ganó", "quien gano", "quién es",
+    "quien es el actual", "temperatura", "clima", "tiempo en"
+  ];
+  const lower = text.toLowerCase();
+  return keywords.some(k => lower.includes(k));
+}
+
+// ─── NUEVA FUNCIÓN: Hace búsqueda web real con Brave Search API ──────────
+async function doWebSearch(query) {
+  const apiKey = process.env.BRAVE_API_KEY;
+  if (!apiKey) return null;
+
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(query.slice(0, 200));
+    const options = {
+      hostname: "api.search.brave.com",
+      path: `/res/v1/web/search?q=${q}&count=5&country=PE&search_lang=es`,
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": apiKey
+      }
+    };
+    const req = https.request(options, res => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          const results = (data.web?.results || []).slice(0, 5);
+          if (!results.length) return resolve(null);
+          const summary = results.map((r, i) =>
+            `[${i+1}] ${r.title}\n${r.description || ""}\nURL: ${r.url}`
+          ).join("\n\n");
+          resolve(summary);
+        } catch { resolve(null); }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
+
+// ─── NUEVA FUNCIÓN: Extrae el texto principal del último mensaje ──────────
+function extractLastUserText(messages) {
+  if (!messages || messages.length === 0) return "";
+  const last = messages[messages.length - 1];
+  if (typeof last.content === "string") return last.content;
+  if (Array.isArray(last.content)) {
+    return last.content.filter(b => b.type === "text").map(b => b.text).join(" ");
+  }
+  return "";
+}
+
+// ─── NUEVA FUNCIÓN: Inyecta resultados de búsqueda en el system prompt ───
+function injectSearchResults(systemPrompt, searchResults) {
+  const today = new Date().toLocaleDateString("es-ES", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric"
+  });
+  return systemPrompt + `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌐 BÚSQUEDA WEB EN TIEMPO REAL
+Fecha actual: ${today}
+
+Los siguientes resultados fueron obtenidos de internet ahora mismo para responder la pregunta del usuario. Úsalos para dar una respuesta actualizada y precisa. Cita las fuentes cuando sea relevante.
+
+${searchResults}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+}
+
+async function callAPI(payload) {
+  return new Promise(async (resolve, reject) => {
     const rawMessages = payload.messages || [];
-    const systemPrompt = payload.system || "";
+    let systemPrompt = payload.system || "";
     let hostname, urlPath, headers, body;
+
+    // ── Búsqueda web automática (si hay BRAVE_API_KEY configurada) ─────────
+    if (needsWebSearch(rawMessages)) {
+      const query = extractLastUserText(rawMessages);
+      console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
+      const searchResults = await doWebSearch(query);
+      if (searchResults) {
+        systemPrompt = injectSearchResults(systemPrompt, searchResults);
+        console.log("✅ Resultados web inyectados en el prompt");
+      } else {
+        // Sin Brave API Key: inyectar fecha actual para que el modelo sea consciente
+        const today = new Date().toLocaleDateString("es-ES", {
+          weekday: "long", year: "numeric", month: "long", day: "numeric"
+        });
+        systemPrompt += `\n\n⚠️ Fecha actual: ${today}. Si el usuario pregunta sobre datos en tiempo real (estadísticas, noticias, precios), indica que no tienes acceso a internet en este momento y que los datos pueden estar desactualizados. NUNCA inventes cifras o estadísticas recientes.`;
+        console.log("⚠️  Sin BRAVE_API_KEY — fecha inyectada, sin búsqueda web");
+      }
+    }
 
     if (PROVIDER === "groq") {
       const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
       const msgs = flattenForOpenAI(rawMessages, systemPrompt);
       if (!msgs) return reject(new Error("No hay mensajes válidos."));
-
       body = JSON.stringify({ model, messages: msgs, max_tokens: 1500, temperature: 0.7 });
       hostname = "api.groq.com";
       urlPath  = "/openai/v1/chat/completions";
@@ -219,7 +277,13 @@ function callAPI(payload) {
       const msgs = flattenForAnthropic(rawMessages);
       if (!msgs) return reject(new Error("No hay mensajes válidos."));
 
-      const apiPayload = { model, max_tokens: 1500, messages: msgs };
+      const apiPayload = {
+        model,
+        max_tokens: 1500,
+        messages: msgs,
+        // ── Web Search nativo de Anthropic ────────────────────────────────
+        tools: [{ type: "web_search_20250305", name: "web_search" }]
+      };
       if (systemPrompt) apiPayload.system = systemPrompt;
       body     = JSON.stringify(apiPayload);
       hostname = "api.anthropic.com";
@@ -230,13 +294,12 @@ function callAPI(payload) {
         "anthropic-version": "2023-06-01",
         "Content-Length":    Buffer.byteLength(body),
       };
-      console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b`);
+      console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b (web_search activo)`);
 
     } else {
       const model = process.env.OPENAI_MODEL || "gpt-4o";
       const msgs = flattenForOpenAI(rawMessages, systemPrompt);
       if (!msgs) return reject(new Error("No hay mensajes válidos."));
-
       body     = JSON.stringify({ model, messages: msgs, max_tokens: 1500 });
       hostname = "api.openai.com";
       urlPath  = "/v1/chat/completions";
@@ -272,7 +335,15 @@ function normalizeResponse(raw, status) {
         return JSON.stringify({ content: [{ type: "text", text: "Error API: " + msg }] });
       } catch { return raw; }
     }
-    return raw;
+    // ── Extraer solo bloques de texto (ignorar tool_use y tool_result) ────
+    try {
+      const data = JSON.parse(raw);
+      const textBlocks = (data.content || []).filter(b => b.type === "text");
+      if (textBlocks.length > 0) {
+        return JSON.stringify({ content: textBlocks });
+      }
+      return raw;
+    } catch { return raw; }
   }
   try {
     const data = JSON.parse(raw);
@@ -331,6 +402,7 @@ server.listen(PORT, () => {
   console.log("╠══════════════════════════════════════╣");
   console.log(`║  Puerto:    ${PORT}                      ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(26)}║`);
+  console.log(`║  Web Search: ${process.env.BRAVE_API_KEY ? "✅ Brave API" : "⚠️  Sin Brave API Key"}        ║`);
   console.log("╚══════════════════════════════════════╝\n");
 });
 
