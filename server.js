@@ -23,11 +23,10 @@ const PORT     = process.env.PORT || 3000;
 const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
-// ─── Modelos Groq ──────────────────────────────────────────────────────────
 const GROQ_TEXT_MODEL   = process.env.GROQ_MODEL        || "llama-3.3-70b-versatile";
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+const GEMINI_MODEL      = process.env.GEMINI_MODEL      || "gemini-2.0-flash";
 
-// Detecta si el último mensaje contiene imagen
 function messageHasImage(messages) {
   if (!messages || messages.length === 0) return false;
   const last = messages[messages.length - 1];
@@ -35,8 +34,10 @@ function messageHasImage(messages) {
 }
 
 console.log("🔧 Variables de entorno detectadas:");
-console.log("   PORT             :", process.env.PORT        || "❌ no definida");
-console.log("   AI_PROVIDER      :", process.env.AI_PROVIDER || "❌ no definida");
+console.log("   PORT             :", process.env.PORT             || "❌ no definida");
+console.log("   AI_PROVIDER      :", process.env.AI_PROVIDER      || "❌ no definida");
+console.log("   GEMINI_API_KEY   :", process.env.GEMINI_API_KEY   ? "✅ existe" : "❌ no definida");
+console.log("   GEMINI_MODEL     :", GEMINI_MODEL);
 console.log("   OPENAI_API_KEY   :", process.env.OPENAI_API_KEY   ? "✅ existe" : "❌ no definida");
 console.log("   OPENAI_MODEL     :", process.env.OPENAI_MODEL     || "gpt-4o (default)");
 console.log("   GROQ_API_KEY     :", process.env.GROQ_API_KEY     ? "✅ existe" : "❌ no definida");
@@ -61,6 +62,58 @@ function readBody(req) {
     req.on("end", () => res(Buffer.concat(chunks).toString("utf8")));
     req.on("error", rej);
   });
+}
+
+// ─── Convierte mensajes al formato Gemini ────────────────────────────────
+function toGeminiMessages(messages, systemPrompt) {
+  const contents = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    const role = m.role === "assistant" ? "model" : "user";
+    const isLast = (i === messages.length - 1);
+    const parts = [];
+
+    // Agregar system prompt solo en el primer mensaje de usuario
+    if (i === 0 && systemPrompt && role === "user") {
+      parts.push({ text: systemPrompt + "\n\n" });
+    }
+
+    if (typeof m.content === "string") {
+      if (m.content.trim()) parts.push({ text: m.content.trim() });
+    } else if (Array.isArray(m.content)) {
+      for (const block of m.content) {
+        if (!block || !block.type) continue;
+        if (block.type === "text" && block.text?.trim()) {
+          parts.push({ text: block.text.trim() });
+        } else if (block.type === "image" && isLast) {
+          const src = block.source || {};
+          if (src.type === "base64" && src.data) {
+            parts.push({
+              inlineData: {
+                mimeType: src.media_type || "image/png",
+                data: src.data
+              }
+            });
+          }
+        }
+      }
+    }
+
+    if (parts.length === 0) continue;
+
+    // Gemini no acepta dos mensajes seguidos del mismo rol
+    if (contents.length > 0 && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts.push(...parts);
+    } else {
+      contents.push({ role, parts });
+    }
+  }
+
+  // Gemini requiere que el primer mensaje sea "user"
+  while (contents.length > 0 && contents[0].role !== "user") contents.shift();
+  if (contents.length === 0) return null;
+  return contents;
 }
 
 // ─── Convierte content al formato OpenAI ─────────────────────────────────
@@ -198,7 +251,7 @@ function flattenForAnthropic(messages) {
   return result;
 }
 
-// ─── Detecta si el mensaje necesita búsqueda web ─────────────────────────
+// ─── Detecta si necesita búsqueda web ────────────────────────────────────
 function needsWebSearch(messages) {
   if (!messages || messages.length === 0) return false;
   const last = messages[messages.length - 1];
@@ -309,11 +362,29 @@ async function callAPI(payload) {
     }
   }
 
+  // ── GEMINI ────────────────────────────────────────────────────────────────
+  if (PROVIDER === "gemini") {
+    const model   = GEMINI_MODEL;
+    const apiKey  = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY no definida");
+
+    const contents = toGeminiMessages(rawMessages, systemPrompt);
+    if (!contents) throw new Error("No hay mensajes válidos.");
+
+    const geminiPayload = { contents, generationConfig: { maxOutputTokens: 4000, temperature: 0.3 } };
+    body     = JSON.stringify(geminiPayload);
+    hostname = "generativelanguage.googleapis.com";
+    urlPath  = `/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    headers  = {
+      "Content-Type":   "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    };
+    console.log(`\n→ GEMINI [${model}] msgs:${contents.length} body:${body.length}b`);
+
   // ── OPENAI ────────────────────────────────────────────────────────────────
-  if (PROVIDER === "openai") {
+  } else if (PROVIDER === "openai") {
     const model = process.env.OPENAI_MODEL || "gpt-4o";
-    // GPT-4o soporta visión nativa — siempre useVision=true
-    const msgs = flattenForOpenAI(rawMessages, systemPrompt, true);
+    const msgs  = flattenForOpenAI(rawMessages, systemPrompt, true);
     if (!msgs) throw new Error("No hay mensajes válidos.");
     body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000 });
     hostname = "api.openai.com";
@@ -327,7 +398,6 @@ async function callAPI(payload) {
 
   // ── GROQ ──────────────────────────────────────────────────────────────────
   } else if (PROVIDER === "groq") {
-    // Si hay imagen → modelo visión, si es texto → modelo razonamiento
     const hasImage = messageHasImage(rawMessages);
     const model    = hasImage ? GROQ_VISION_MODEL : GROQ_TEXT_MODEL;
     const msgs     = flattenForOpenAI(rawMessages, systemPrompt, hasImage);
@@ -385,6 +455,22 @@ async function callAPI(payload) {
 }
 
 function normalizeResponse(raw, status) {
+  // ── Gemini ──
+  if (PROVIDER === "gemini") {
+    try {
+      const data = JSON.parse(raw);
+      if (status !== 200) {
+        const msg = data.error?.message || raw.slice(0, 200);
+        return JSON.stringify({ content: [{ type: "text", text: "Error API: " + msg }] });
+      }
+      const text = data.candidates?.[0]?.content?.parts
+        ?.filter(p => p.text)?.map(p => p.text)?.join("") || "";
+      return JSON.stringify({ content: [{ type: "text", text }] });
+    } catch {
+      return JSON.stringify({ content: [{ type: "text", text: "Error al parsear respuesta Gemini." }] });
+    }
+  }
+  // ── Anthropic ──
   if (PROVIDER === "anthropic") {
     if (status !== 200) {
       try {
@@ -399,6 +485,7 @@ function normalizeResponse(raw, status) {
       return raw;
     } catch { return raw; }
   }
+  // ── OpenAI / Groq ──
   try {
     const data = JSON.parse(raw);
     if (status !== 200) {
@@ -456,14 +543,17 @@ server.listen(PORT, () => {
   console.log("╠══════════════════════════════════════════════╣");
   console.log(`║  Puerto:    ${PORT}                               ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(33)}║`);
-  if (PROVIDER === "openai") {
+  if (PROVIDER === "gemini") {
+    console.log(`║  Modelo:    ${GEMINI_MODEL.padEnd(33)}║`);
+    console.log(`║  Vision:    ✅ nativa (Gemini)               ║`);
+  } else if (PROVIDER === "openai") {
     console.log(`║  Modelo:    ${(process.env.OPENAI_MODEL||"gpt-4o").padEnd(33)}║`);
     console.log(`║  Vision:    ✅ nativa (GPT-4o)               ║`);
   } else if (PROVIDER === "groq") {
     console.log(`║  Texto:     ${GROQ_TEXT_MODEL.padEnd(33)}║`);
     console.log(`║  Vision:    ${GROQ_VISION_MODEL.slice(0,33).padEnd(33)}║`);
   } else if (PROVIDER === "anthropic") {
-    console.log(`║  Modelo:    ${(process.env.ANTHROPIC_MODEL||"claude-sonnet-4-20250514").padEnd(33)}║`);
+    console.log(`║  Modelo:    ${(process.env.ANTHROPIC_MODEL||"claude-sonnet").padEnd(33)}║`);
     console.log(`║  Vision:    ✅ nativa (Anthropic)            ║`);
   }
   console.log(`║  Tavily:    ${process.env.TAVILY_API_KEY ? "✅ activo" : "⚠️  no configurado"}                    ║`);
