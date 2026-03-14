@@ -24,11 +24,11 @@ const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
 console.log("🔧 Variables de entorno detectadas:");
-console.log("   PORT      :", process.env.PORT      || "❌ no definida");
-console.log("   AI_PROVIDER:", process.env.AI_PROVIDER || "❌ no definida");
-console.log("   GROQ_API_KEY:", process.env.GROQ_API_KEY ? "✅ existe" : "❌ no definida");
-console.log("   GROQ_MODEL :", process.env.GROQ_MODEL || "❌ no definida");
-console.log("   SERP_API_KEY:", process.env.SERP_API_KEY ? `✅ existe (${process.env.SERP_API_KEY.slice(0,6)}...${process.env.SERP_API_KEY.slice(-4)})` : "❌ no definida");
+console.log("   PORT        :", process.env.PORT        || "❌ no definida");
+console.log("   AI_PROVIDER :", process.env.AI_PROVIDER || "❌ no definida");
+console.log("   GROQ_API_KEY:", process.env.GROQ_API_KEY  ? "✅ existe" : "❌ no definida");
+console.log("   GROQ_MODEL  :", process.env.GROQ_MODEL   || "❌ no definida");
+console.log("   TAVILY_API_KEY:", process.env.TAVILY_API_KEY ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -185,213 +185,6 @@ function needsWebSearch(messages) {
   return keywords.some(k => lower.includes(k));
 }
 
-// ─── Detecta si es consulta de Tokusatsu ─────────────────────────────────
-function isTokusatsuQuery(text) {
-  const lower = text.toLowerCase();
-  return ["sentai", "kamen rider", "ultraman", "power rangers", "tokusatsu",
-          "gorenger", "zyuranger", "gokaiger", "ryusoulger", "donbrothers",
-          "king-ohger", "boonboomger", "gozyuger", "shadowrangers"].some(k => lower.includes(k));
-}
-
-// ─── Detecta si necesita lista completa ──────────────────────────────────
-function needsFullList(text) {
-  const lower = text.toLowerCase();
-  return ["todos los", "todas las", "lista completa", "dame todos", "dame todas",
-          "enumera", "lista de", "cuántos hay", "cuantos hay",
-          "todos hasta", "todas hasta", "hasta el 2026", "hasta 2026"].some(k => lower.includes(k));
-}
-
-// ─── Fetch contenido de Wikipedia via API ────────────────────────────────
-async function fetchWikipedia(query) {
-  return new Promise((resolve) => {
-    const searchTerm = encodeURIComponent(query.slice(0, 150));
-    const options = {
-      hostname: "es.wikipedia.org",
-      path: `/w/api.php?action=query&list=search&srsearch=${searchTerm}&format=json&srlimit=1`,
-      method: "GET",
-      headers: { "Accept": "application/json", "User-Agent": "KenyraIA/1.0" }
-    };
-    const req = https.request(options, res => {
-      const chunks = [];
-      res.on("data", c => chunks.push(c));
-      res.on("end", () => {
-        try {
-          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          const results = data.query?.search || [];
-          if (!results.length) return resolve(null);
-          const pageId = results[0].pageid;
-          const contentOptions = {
-            hostname: "es.wikipedia.org",
-            path: `/w/api.php?action=query&pageids=${pageId}&prop=extracts&exintro=false&explaintext=true&format=json&exchars=8000`,
-            method: "GET",
-            headers: { "Accept": "application/json", "User-Agent": "KenyraIA/1.0" }
-          };
-          const req2 = https.request(contentOptions, res2 => {
-            const chunks2 = [];
-            res2.on("data", c => chunks2.push(c));
-            res2.on("end", () => {
-              try {
-                const data2 = JSON.parse(Buffer.concat(chunks2).toString("utf8"));
-                const page = data2.query?.pages?.[pageId];
-                const extract = page?.extract || "";
-                if (!extract) return resolve(null);
-                console.log(`📖 Wikipedia: "${page.title}" (${extract.length} chars)`);
-                resolve(`[Wikipedia: ${page.title}]\n${extract.slice(0, 6000)}`);
-              } catch(e) {
-                console.log(`❌ Wikipedia content error: ${e.message}`);
-                resolve(null);
-              }
-            });
-          });
-          req2.on("error", () => resolve(null));
-          req2.end();
-        } catch(e) {
-          console.log(`❌ Wikipedia search error: ${e.message}`);
-          resolve(null);
-        }
-      });
-    });
-    req.on("error", () => resolve(null));
-    req.end();
-  });
-}
-
-// ─── Fetch RangerWiki Fandom via SerpApi ─────────────────────────────────
-// ─── Fetch directo a RangerWiki Fandom ───────
-async function fetchRangerWiki(query) {
-  const lower = query.toLowerCase();
-  let fandomPath = null;
-  if (lower.includes("sentai")) fandomPath = "/wiki/Super_Sentai";
-  else if (lower.includes("kamen rider")) fandomPath = "/wiki/Kamen_Rider_Series";
-  else if (lower.includes("ultraman")) fandomPath = "/wiki/Ultraman_Series";
-  else if (lower.includes("power rangers")) fandomPath = "/wiki/Power_Rangers";
-  if (!fandomPath) return null;
-
-  return new Promise((resolve) => {
-    const options = {
-      hostname: "powerrangers.fandom.com",
-      path: fandomPath,
-      method: "GET",
-      headers: {
-        "Accept": "text/html",
-        "User-Agent": "Mozilla/5.0 (compatible; KenyraIA/1.0)"
-      }
-    };
-    console.log(`🦸 Fetching RangerWiki: https://powerrangers.fandom.com${fandomPath}`);
-    const req = https.request(options, res => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        console.log(`↪️ Redirect: ${res.headers.location}`);
-        return resolve(null);
-      }
-      const chunks = [];
-      res.on("data", c => chunks.push(c));
-      res.on("end", () => {
-        try {
-          const html = Buffer.concat(chunks).toString("utf8");
-          const content = html
-            .replace(/<script[\s\S]*?<\/script>/gi, "")
-            .replace(/<style[\s\S]*?<\/style>/gi, "")
-            .replace(/<[^>]+>/g, " ")
-            .replace(/&nbsp;/g, " ")
-            .replace(/&amp;/g, "&")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">")
-            .replace(/\s{2,}/g, " ")
-            .trim();
-          if (!content || content.length < 100) return resolve(null);
-          console.log(`✅ RangerWiki obtenido: ${content.length} chars`);
-          resolve(`[RangerWiki - powerrangers.fandom.com]\n${content.slice(0, 7000)}`);
-        } catch(e) {
-          console.log(`❌ RangerWiki parse error: ${e.message}`);
-          resolve(null);
-        }
-      });
-    });
-    req.on("error", (e) => {
-      console.log(`❌ RangerWiki network error: ${e.message}`);
-      resolve(null);
-    });
-    req.end();
-  });
-}
-
-// ─── Búsqueda web con SerpApi ─────────────────────────────────────────────
-async function doWebSearch(query) {
-  const apiKey = process.env.SERP_API_KEY;
-  if (!apiKey) {
-    console.log("❌ SERP_API_KEY no está definida en las variables de entorno");
-    return null;
-  }
-
-  console.log(`🔑 Usando SERP_API_KEY: ${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`);
-
-  // 1. Si es Tokusatsu → RangerWiki + ShadowRangers primero
-  if (isTokusatsuQuery(query)) {
-    console.log("🦸 Consulta Tokusatsu — buscando en RangerWiki/ShadowRangers...");
-    const fandomResult = await fetchRangerWiki(query);
-    if (fandomResult) {
-      // También combinar con Wikipedia para listas completas
-      if (needsFullList(query)) {
-        const wikiResult = await fetchWikipedia(query);
-        if (wikiResult) {
-          return fandomResult + "\n\n" + wikiResult;
-        }
-      }
-      return fandomResult;
-    }
-  }
-
-  // 2. Si necesita lista completa → Wikipedia
-  if (needsFullList(query)) {
-    console.log("📖 Solicitud de lista completa — buscando en Wikipedia...");
-    const wikiResult = await fetchWikipedia(query);
-    if (wikiResult) {
-      console.log("✅ Contenido Wikipedia obtenido");
-      return wikiResult;
-    }
-    console.log("⚠️ Wikipedia no encontró resultados, usando SerpApi...");
-  }
-
-  // 3. Búsqueda normal con SerpApi
-  return new Promise((resolve) => {
-    const q = encodeURIComponent(query.slice(0, 200));
-    const options = {
-      hostname: "serpapi.com",
-      path: `/search.json?q=${q}&api_key=${apiKey}&hl=es&gl=pe&num=5`,
-      method: "GET",
-      headers: { "Accept": "application/json" }
-    };
-    const req = https.request(options, res => {
-      const chunks = [];
-      res.on("data", c => chunks.push(c));
-      res.on("end", () => {
-        try {
-          const raw = Buffer.concat(chunks).toString("utf8");
-          console.log(`🔎 SerpApi [${res.statusCode}]: ${raw.slice(0, 300)}`);
-          const data = JSON.parse(raw);
-          const results = (data.organic_results || []).slice(0, 5);
-          if (!results.length) {
-            console.log("⚠️ SerpApi no devolvió resultados orgánicos");
-            return resolve(null);
-          }
-          const summary = results.map((r, i) =>
-            `[${i+1}] ${r.title}\n${r.snippet || ""}`
-          ).join("\n\n");
-          resolve(summary);
-        } catch(e) {
-          console.log(`❌ SerpApi parse error: ${e.message}`);
-          resolve(null);
-        }
-      });
-    });
-    req.on("error", (e) => {
-      console.log(`❌ SerpApi network error: ${e.message}`);
-      resolve(null);
-    });
-    req.end();
-  });
-}
-
 // ─── Extrae el texto del último mensaje ──────────────────────────────────
 function extractLastUserText(messages) {
   if (!messages || messages.length === 0) return "";
@@ -401,6 +194,80 @@ function extractLastUserText(messages) {
     return last.content.filter(b => b.type === "text").map(b => b.text).join(" ");
   }
   return "";
+}
+
+// ─── Búsqueda con Tavily ──────────────────────────────────────────────────
+async function doTavilySearch(query) {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) {
+    console.log("❌ TAVILY_API_KEY no definida");
+    return null;
+  }
+
+  console.log(`🔍 Tavily buscando: "${query.slice(0, 80)}..."`);
+
+  const body = JSON.stringify({
+    api_key: apiKey,
+    query: query.slice(0, 400),
+    search_depth: "advanced",
+    include_answer: true,
+    include_raw_content: false,
+    max_results: 5,
+    include_domains: [],
+    exclude_domains: []
+  });
+
+  return new Promise((resolve) => {
+    const options = {
+      hostname: "api.tavily.com",
+      path: "/search",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      }
+    };
+
+    const req = https.request(options, res => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        try {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          console.log(`🔎 Tavily [${res.statusCode}]: ${raw.slice(0, 200)}`);
+          const data = JSON.parse(raw);
+
+          let result = "";
+
+          // Respuesta directa de Tavily (muy útil)
+          if (data.answer) {
+            result += `Respuesta directa: ${data.answer}\n\n`;
+          }
+
+          // Resultados con contenido completo
+          if (data.results && data.results.length > 0) {
+            result += data.results.map((r, i) =>
+              `[${i+1}] ${r.title}\n${r.content || r.snippet || ""}`
+            ).join("\n\n");
+          }
+
+          if (!result.trim()) return resolve(null);
+          console.log(`✅ Tavily: ${result.length} chars obtenidos`);
+          resolve(result);
+        } catch(e) {
+          console.log(`❌ Tavily parse error: ${e.message}`);
+          resolve(null);
+        }
+      });
+    });
+
+    req.on("error", (e) => {
+      console.log(`❌ Tavily network error: ${e.message}`);
+      resolve(null);
+    });
+    req.write(body);
+    req.end();
+  });
 }
 
 // ─── Inyecta resultados de búsqueda en el system prompt ──────────────────
@@ -428,10 +295,10 @@ async function callAPI(payload) {
   if (needsWebSearch(rawMessages)) {
     const query = extractLastUserText(rawMessages);
     console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
-    const searchResults = await doWebSearch(query);
+    const searchResults = await doTavilySearch(query);
     if (searchResults) {
       systemPrompt = injectSearchResults(systemPrompt, searchResults);
-      console.log("✅ Resultados web inyectados en el prompt");
+      console.log("✅ Resultados Tavily inyectados en el prompt");
     } else {
       const today = new Date().toLocaleDateString("es-ES", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
@@ -580,7 +447,7 @@ server.listen(PORT, () => {
   console.log("╠══════════════════════════════════════╣");
   console.log(`║  Puerto:    ${PORT}                      ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(26)}║`);
-  console.log(`║  Web Search: ${process.env.SERP_API_KEY ? "✅ SerpApi activo        " : "⚠️  Sin SERP_API_KEY     "}║`);
+  console.log(`║  Web Search: ${process.env.TAVILY_API_KEY ? "✅ Tavily activo         " : "⚠️  Sin TAVILY_API_KEY   "}║`);
   console.log("╚══════════════════════════════════════╝\n");
 });
 
