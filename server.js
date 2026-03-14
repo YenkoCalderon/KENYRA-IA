@@ -257,34 +257,60 @@ async function fetchWikipedia(query) {
 }
 
 // ─── Fetch RangerWiki Fandom via SerpApi ─────────────────────────────────
+// ─── Fetch directo a RangerWiki Fandom ───────
 async function fetchRangerWiki(query) {
-  const apiKey = process.env.SERP_API_KEY;
-  if (!apiKey) return null;
+  const lower = query.toLowerCase();
+  let fandomPath = null;
+  if (lower.includes("sentai")) fandomPath = "/wiki/Super_Sentai";
+  else if (lower.includes("kamen rider")) fandomPath = "/wiki/Kamen_Rider_Series";
+  else if (lower.includes("ultraman")) fandomPath = "/wiki/Ultraman_Series";
+  else if (lower.includes("power rangers")) fandomPath = "/wiki/Power_Rangers";
+  if (!fandomPath) return null;
+
   return new Promise((resolve) => {
-    const q = encodeURIComponent(query.slice(0, 150) + " site:powerrangers.fandom.com OR site:shadowrangers.live");
     const options = {
-      hostname: "serpapi.com",
-      path: `/search.json?q=${q}&api_key=${apiKey}&hl=es&gl=pe&num=5`,
+      hostname: "powerrangers.fandom.com",
+      path: fandomPath,
       method: "GET",
-      headers: { "Accept": "application/json" }
+      headers: {
+        "Accept": "text/html",
+        "User-Agent": "Mozilla/5.0 (compatible; KenyraIA/1.0)"
+      }
     };
+    console.log(`🦸 Fetching RangerWiki: https://powerrangers.fandom.com${fandomPath}`);
     const req = https.request(options, res => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        console.log(`↪️ Redirect: ${res.headers.location}`);
+        return resolve(null);
+      }
       const chunks = [];
       res.on("data", c => chunks.push(c));
       res.on("end", () => {
         try {
-          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          const results = (data.organic_results || []).slice(0, 5);
-          if (!results.length) return resolve(null);
-          const summary = results.map((r, i) =>
-            `[${i+1}] ${r.title}\n${r.snippet || ""}`
-          ).join("\n\n");
-          console.log(`🦸 RangerWiki/ShadowRangers: ${results.length} resultados`);
-          resolve(summary);
-        } catch(e) { resolve(null); }
+          const html = Buffer.concat(chunks).toString("utf8");
+          const content = html
+            .replace(/<script[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/&nbsp;/g, " ")
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/\s{2,}/g, " ")
+            .trim();
+          if (!content || content.length < 100) return resolve(null);
+          console.log(`✅ RangerWiki obtenido: ${content.length} chars`);
+          resolve(`[RangerWiki - powerrangers.fandom.com]\n${content.slice(0, 7000)}`);
+        } catch(e) {
+          console.log(`❌ RangerWiki parse error: ${e.message}`);
+          resolve(null);
+        }
       });
     });
-    req.on("error", () => resolve(null));
+    req.on("error", (e) => {
+      console.log(`❌ RangerWiki network error: ${e.message}`);
+      resolve(null);
+    });
     req.end();
   });
 }
