@@ -24,12 +24,10 @@ const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
 // ─── Modelos Groq ──────────────────────────────────────────────────────────
-// GROQ_MODEL        = modelo de texto/razonamiento (ej: llama-3.3-70b-versatile)
-// GROQ_VISION_MODEL = modelo con visión (ej: meta-llama/llama-4-scout-17b-16e-instruct)
 const GROQ_TEXT_MODEL   = process.env.GROQ_MODEL        || "llama-3.3-70b-versatile";
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
 
-// Detecta si el mensaje actual contiene imágenes
+// Detecta si el último mensaje contiene imagen
 function messageHasImage(messages) {
   if (!messages || messages.length === 0) return false;
   const last = messages[messages.length - 1];
@@ -39,10 +37,13 @@ function messageHasImage(messages) {
 console.log("🔧 Variables de entorno detectadas:");
 console.log("   PORT             :", process.env.PORT        || "❌ no definida");
 console.log("   AI_PROVIDER      :", process.env.AI_PROVIDER || "❌ no definida");
-console.log("   GROQ_API_KEY     :", process.env.GROQ_API_KEY  ? "✅ existe" : "❌ no definida");
+console.log("   OPENAI_API_KEY   :", process.env.OPENAI_API_KEY   ? "✅ existe" : "❌ no definida");
+console.log("   OPENAI_MODEL     :", process.env.OPENAI_MODEL     || "gpt-4o (default)");
+console.log("   GROQ_API_KEY     :", process.env.GROQ_API_KEY     ? "✅ existe" : "❌ no definida");
 console.log("   GROQ_MODEL       :", GROQ_TEXT_MODEL);
 console.log("   GROQ_VISION_MODEL:", GROQ_VISION_MODEL);
-console.log("   TAVILY_API_KEY   :", process.env.TAVILY_API_KEY ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
+console.log("   ANTHROPIC_API_KEY:", process.env.ANTHROPIC_API_KEY ? "✅ existe" : "❌ no definida");
+console.log("   TAVILY_API_KEY   :", process.env.TAVILY_API_KEY   ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -75,7 +76,7 @@ function toOpenAIContent(content, stripImages = false) {
         if (t) parts.push({ type: "text", text: t });
       } else if (block.type === "image") {
         if (stripImages) {
-          parts.push({ type: "text", text: "[imagen adjunta — modelo sin visión]" });
+          parts.push({ type: "text", text: "[imagen adjunta]" });
         } else {
           const src = block.source || {};
           if (src.type === "base64" && src.data) {
@@ -109,7 +110,7 @@ function contentToString(content) {
   return String(content).trim() || null;
 }
 
-function flattenForOpenAI(messages, systemPrompt, useVision = false) {
+function flattenForOpenAI(messages, systemPrompt, useVision = true) {
   const result = [];
   if (systemPrompt) result.push({ role: "system", content: systemPrompt });
   let lastRole = "system";
@@ -117,7 +118,6 @@ function flattenForOpenAI(messages, systemPrompt, useVision = false) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
     const isLast = (i === messages.length - 1);
-    // Solo pasar imágenes si estamos usando el modelo vision
     const stripImages = !useVision;
     let content = isLast && role === "user"
       ? toOpenAIContent(m.content, stripImages)
@@ -146,15 +146,12 @@ function flattenForOpenAI(messages, systemPrompt, useVision = false) {
 function flattenForAnthropic(messages) {
   const result = [];
   let lastRole = null;
-
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
     const isLast = i === messages.length - 1;
     let content = m.content;
-
     if (!content) continue;
-
     if (isLast && role === "user") {
       if (Array.isArray(content)) {
         const blocks = content.filter(b => {
@@ -178,9 +175,7 @@ function flattenForAnthropic(messages) {
       } else if (Array.isArray(content)) {
         const text = content
           .filter(b => b && b.type === "text" && b.text?.trim())
-          .map(b => b.text.trim())
-          .join("\n")
-          .trim();
+          .map(b => b.text.trim()).join("\n").trim();
         if (!text) continue;
         content = text;
       } else {
@@ -188,19 +183,16 @@ function flattenForAnthropic(messages) {
         if (!content) continue;
       }
     }
-
     if (role === lastRole) {
       const prev = result[result.length - 1];
       const toStr = c => typeof c === "string"
-        ? c
-        : c.filter(b => b.type === "text").map(b => b.text).join("\n");
+        ? c : c.filter(b => b.type === "text").map(b => b.text).join("\n");
       prev.content = toStr(prev.content) + "\n" + toStr(content);
     } else {
       result.push({ role, content });
       lastRole = role;
     }
   }
-
   while (result.length > 0 && result[0].role !== "user") result.shift();
   if (result.length === 0) return null;
   return result;
@@ -216,35 +208,33 @@ function needsWebSearch(messages) {
         ? last.content.filter(b => b.type === "text").map(b => b.text).join(" ")
         : "");
   const keywords = [
-    "actualidad", "actual", "ahora", "hoy", "2024", "2025", "2026", "2027",
-    "noticia", "noticias", "último", "ultima", "últimas", "ultimas",
-    "reciente", "recientes", "recientemente", "hoy en dia", "actualmente",
-    "precio", "cotización", "dolar", "bitcoin", "crypto", "bolsa", "mercado",
-    "gol", "goles", "partido", "resultado", "campeón", "campeon", "liga",
-    "mundial", "torneo", "clasificacion", "tabla", "standings",
-    "presidente", "elección", "elecciones", "guerra", "crisis", "gobierno",
-    "ministro", "congreso", "senado", "parlamento",
-    "lanzó", "lanzamiento", "estreno", "nuevo modelo", "nueva version",
-    "película", "pelicula", "serie", "temporada", "anime", "manga",
-    "todos los", "todas las", "lista de", "lista completa", "cuántos hay",
-    "cuantos hay", "historia de", "evolución", "evolution",
-    "sentai", "kamen rider", "ultraman", "marvel", "dc comics",
-    "cuánto va", "cuanto va", "quién ganó", "quien gano", "quién es",
-    "quien es el actual", "temperatura", "clima", "tiempo en",
-    "cuántos", "cuantos", "cuántas", "cuantas",
-    "dame todos", "dame todas", "enumera", "lista"
+    "actualidad","actual","ahora","hoy","2024","2025","2026","2027",
+    "noticia","noticias","último","ultima","últimas","ultimas",
+    "reciente","recientes","recientemente","hoy en dia","actualmente",
+    "precio","cotización","dolar","bitcoin","crypto","bolsa","mercado",
+    "gol","goles","partido","resultado","campeón","campeon","liga",
+    "mundial","torneo","clasificacion","tabla","standings",
+    "presidente","elección","elecciones","guerra","crisis","gobierno",
+    "ministro","congreso","senado","parlamento",
+    "lanzó","lanzamiento","estreno","nuevo modelo","nueva version",
+    "película","pelicula","serie","temporada","anime","manga",
+    "todos los","todas las","lista de","lista completa","cuántos hay",
+    "cuantos hay","historia de","evolución","evolution",
+    "sentai","kamen rider","ultraman","marvel","dc comics",
+    "cuánto va","cuanto va","quién ganó","quien gano","quién es",
+    "quien es el actual","temperatura","clima","tiempo en",
+    "cuántos","cuantos","cuántas","cuantas",
+    "dame todos","dame todas","enumera","lista"
   ];
-  const lower = text.toLowerCase();
-  return keywords.some(k => lower.includes(k));
+  return keywords.some(k => text.toLowerCase().includes(k));
 }
 
 function extractLastUserText(messages) {
   if (!messages || messages.length === 0) return "";
   const last = messages[messages.length - 1];
   if (typeof last.content === "string") return last.content;
-  if (Array.isArray(last.content)) {
+  if (Array.isArray(last.content))
     return last.content.filter(b => b.type === "text").map(b => b.text).join(" ");
-  }
   return "";
 }
 
@@ -252,56 +242,35 @@ function extractLastUserText(messages) {
 async function doTavilySearch(query) {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) { console.log("❌ TAVILY_API_KEY no definida"); return null; }
-
-  console.log(`🔍 Tavily buscando: "${query.slice(0, 80)}..."`);
-
+  console.log(`🔍 Tavily: "${query.slice(0, 80)}..."`);
   const body = JSON.stringify({
-    api_key: apiKey,
-    query: query.slice(0, 400),
-    search_depth: "advanced",
-    include_answer: true,
-    include_raw_content: false,
-    max_results: 5,
-    include_domains: [],
-    exclude_domains: []
+    api_key: apiKey, query: query.slice(0, 400),
+    search_depth: "advanced", include_answer: true,
+    include_raw_content: false, max_results: 5,
+    include_domains: [], exclude_domains: []
   });
-
   return new Promise((resolve) => {
     const req = https.request({
-      hostname: "api.tavily.com",
-      path: "/search",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body)
-      }
+      hostname: "api.tavily.com", path: "/search", method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
     }, res => {
       const chunks = [];
       res.on("data", c => chunks.push(c));
       res.on("end", () => {
         try {
-          const raw = Buffer.concat(chunks).toString("utf8");
-          console.log(`🔎 Tavily [${res.statusCode}]: ${raw.slice(0, 200)}`);
-          const data = JSON.parse(raw);
+          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
           let result = "";
           if (data.answer) result += `Respuesta directa: ${data.answer}\n\n`;
-          if (data.results?.length) {
-            result += data.results.map((r, i) =>
-              `[${i+1}] ${r.title}\n${r.content || r.snippet || ""}`
-            ).join("\n\n");
-          }
+          if (data.results?.length)
+            result += data.results.map((r,i) => `[${i+1}] ${r.title}\n${r.content||r.snippet||""}`).join("\n\n");
           if (!result.trim()) return resolve(null);
           console.log(`✅ Tavily: ${result.length} chars`);
           resolve(result);
-        } catch(e) {
-          console.log(`❌ Tavily parse error: ${e.message}`);
-          resolve(null);
-        }
+        } catch(e) { console.log(`❌ Tavily error: ${e.message}`); resolve(null); }
       });
     });
     req.on("error", e => { console.log(`❌ Tavily error: ${e.message}`); resolve(null); });
-    req.write(body);
-    req.end();
+    req.write(body); req.end();
   });
 }
 
@@ -328,34 +297,42 @@ async function callAPI(payload) {
 
   if (needsWebSearch(rawMessages)) {
     const query = extractLastUserText(rawMessages);
-    console.log(`🔍 Buscando en web: "${query.slice(0, 80)}..."`);
     const searchResults = await doTavilySearch(query);
     if (searchResults) {
       systemPrompt = injectSearchResults(systemPrompt, searchResults);
-      console.log("✅ Resultados Tavily inyectados");
+      console.log("✅ Tavily inyectado");
     } else {
       const today = new Date().toLocaleDateString("es-ES", {
         weekday: "long", year: "numeric", month: "long", day: "numeric"
       });
-      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. NUNCA inventes cifras o estadísticas recientes.`;
-      console.log("⚠️  Sin resultados web");
+      systemPrompt += `\n\n⚠️ Fecha actual: ${today}. NUNCA inventes cifras recientes.`;
     }
   }
 
-  if (PROVIDER === "groq") {
-    // ── Selección automática de modelo ──────────────────────────────────
-    // Si el mensaje tiene imagen → llama-4-scout (visión)
-    // Si es solo texto          → llama-3.3-70b (razonamiento)
-    const hasImage = messageHasImage(rawMessages);
-    const model = hasImage ? GROQ_VISION_MODEL : GROQ_TEXT_MODEL;
-    const useVision = hasImage;
-
-    console.log(`\n→ GROQ [${model}] imagen:${hasImage} msgs:${rawMessages.length}`);
-
-    const msgs = flattenForOpenAI(rawMessages, systemPrompt, useVision);
+  // ── OPENAI ────────────────────────────────────────────────────────────────
+  if (PROVIDER === "openai") {
+    const model = process.env.OPENAI_MODEL || "gpt-4o";
+    // GPT-4o soporta visión nativa — siempre useVision=true
+    const msgs = flattenForOpenAI(rawMessages, systemPrompt, true);
     if (!msgs) throw new Error("No hay mensajes válidos.");
+    body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000 });
+    hostname = "api.openai.com";
+    urlPath  = "/v1/chat/completions";
+    headers  = {
+      "Content-Type":   "application/json",
+      "Authorization":  `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Length": Buffer.byteLength(body),
+    };
+    console.log(`\n→ OPENAI [${model}] msgs:${msgs.length} body:${body.length}b`);
 
-    body = JSON.stringify({ model, messages: msgs, max_tokens: 4000, temperature: 0.3 });
+  // ── GROQ ──────────────────────────────────────────────────────────────────
+  } else if (PROVIDER === "groq") {
+    // Si hay imagen → modelo visión, si es texto → modelo razonamiento
+    const hasImage = messageHasImage(rawMessages);
+    const model    = hasImage ? GROQ_VISION_MODEL : GROQ_TEXT_MODEL;
+    const msgs     = flattenForOpenAI(rawMessages, systemPrompt, hasImage);
+    if (!msgs) throw new Error("No hay mensajes válidos.");
+    body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000, temperature: 0.3 });
     hostname = "api.groq.com";
     urlPath  = "/openai/v1/chat/completions";
     headers  = {
@@ -363,11 +340,12 @@ async function callAPI(payload) {
       "Authorization":  `Bearer ${process.env.GROQ_API_KEY}`,
       "Content-Length": Buffer.byteLength(body),
     };
-    console.log(`   body: ${body.length}b`);
+    console.log(`\n→ GROQ [${model}] imagen:${hasImage} msgs:${msgs.length} body:${body.length}b`);
 
+  // ── ANTHROPIC ─────────────────────────────────────────────────────────────
   } else if (PROVIDER === "anthropic") {
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514";
-    const msgs = flattenForAnthropic(rawMessages);
+    const msgs  = flattenForAnthropic(rawMessages);
     if (!msgs) throw new Error("No hay mensajes válidos.");
     const apiPayload = {
       model, max_tokens: 4000, messages: msgs,
@@ -387,18 +365,7 @@ async function callAPI(payload) {
     console.log(`\n→ ANTHROPIC [${model}] msgs:${msgs.length} body:${body.length}b`);
 
   } else {
-    const model = process.env.OPENAI_MODEL || "gpt-4o";
-    const msgs = flattenForOpenAI(rawMessages, systemPrompt, true);
-    if (!msgs) throw new Error("No hay mensajes válidos.");
-    body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000 });
-    hostname = "api.openai.com";
-    urlPath  = "/v1/chat/completions";
-    headers  = {
-      "Content-Type":   "application/json",
-      "Authorization":  `Bearer ${process.env.OPENAI_API_KEY}`,
-      "Content-Length": Buffer.byteLength(body),
-    };
-    console.log(`\n→ OPENAI [${model}] msgs:${msgs.length} body:${body.length}b`);
+    throw new Error(`Proveedor desconocido: ${PROVIDER}`);
   }
 
   return new Promise((resolve, reject) => {
@@ -422,8 +389,7 @@ function normalizeResponse(raw, status) {
     if (status !== 200) {
       try {
         const e = JSON.parse(raw);
-        const msg = e.error?.message || raw.slice(0, 200);
-        return JSON.stringify({ content: [{ type: "text", text: "Error API: " + msg }] });
+        return JSON.stringify({ content: [{ type: "text", text: "Error API: " + (e.error?.message || raw.slice(0,200)) }] });
       } catch { return raw; }
     }
     try {
@@ -488,11 +454,19 @@ server.listen(PORT, () => {
   console.log("\n╔══════════════════════════════════════════════╗");
   console.log("║         🤖  KENYRA IA  🤖                    ║");
   console.log("╠══════════════════════════════════════════════╣");
-  console.log(`║  Puerto:         ${PORT}                          ║`);
-  console.log(`║  Provider:       ${PROVIDER.toUpperCase().padEnd(28)}║`);
-  console.log(`║  Modelo texto:   ${GROQ_TEXT_MODEL.padEnd(28)}║`);
-  console.log(`║  Modelo visión:  ${GROQ_VISION_MODEL.slice(0,28).padEnd(28)}║`);
-  console.log(`║  Web Search:     ${process.env.TAVILY_API_KEY ? "✅ Tavily activo              " : "⚠️  Sin TAVILY_API_KEY        "}║`);
+  console.log(`║  Puerto:    ${PORT}                               ║`);
+  console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(33)}║`);
+  if (PROVIDER === "openai") {
+    console.log(`║  Modelo:    ${(process.env.OPENAI_MODEL||"gpt-4o").padEnd(33)}║`);
+    console.log(`║  Vision:    ✅ nativa (GPT-4o)               ║`);
+  } else if (PROVIDER === "groq") {
+    console.log(`║  Texto:     ${GROQ_TEXT_MODEL.padEnd(33)}║`);
+    console.log(`║  Vision:    ${GROQ_VISION_MODEL.slice(0,33).padEnd(33)}║`);
+  } else if (PROVIDER === "anthropic") {
+    console.log(`║  Modelo:    ${(process.env.ANTHROPIC_MODEL||"claude-sonnet-4-20250514").padEnd(33)}║`);
+    console.log(`║  Vision:    ✅ nativa (Anthropic)            ║`);
+  }
+  console.log(`║  Tavily:    ${process.env.TAVILY_API_KEY ? "✅ activo" : "⚠️  no configurado"}                    ║`);
   console.log("╚══════════════════════════════════════════════╝\n");
 });
 
