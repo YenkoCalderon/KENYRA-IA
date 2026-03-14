@@ -23,6 +23,14 @@ const PORT     = process.env.PORT || 3000;
 const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
+// ─── Debug de variables de entorno ───────────────────────────────────────
+console.log("🔧 Variables de entorno detectadas:");
+console.log("   PORT      :", process.env.PORT      || "❌ no definida");
+console.log("   AI_PROVIDER:", process.env.AI_PROVIDER || "❌ no definida");
+console.log("   GROQ_API_KEY:", process.env.GROQ_API_KEY ? "✅ existe" : "❌ no definida");
+console.log("   GROQ_MODEL :", process.env.GROQ_MODEL || "❌ no definida");
+console.log("   SERP_API_KEY:", process.env.SERP_API_KEY ? `✅ existe (${process.env.SERP_API_KEY.slice(0,6)}...${process.env.SERP_API_KEY.slice(-4)})` : "❌ no definida");
+
 const MIME = {
   ".html":"text/html; charset=utf-8",
   ".css":"text/css; charset=utf-8",
