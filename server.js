@@ -24,7 +24,7 @@ const PROVIDER = (process.env.AI_PROVIDER || "groq").toLowerCase();
 const STATIC   = __dirname;
 
 // Modelos que soportan visión — NO se les quitan las imágenes
-const VISION_KEYWORDS = ["vision", "llama-4", "llava", "gpt-4o", "gpt-4-turbo"];
+const VISION_KEYWORDS = ["vision", "llama-4", "llava", "scout", "gpt-4o", "gpt-4-turbo"];
 const modelName = (process.env.GROQ_MODEL || process.env.OPENAI_MODEL || "").toLowerCase();
 const SUPPORTS_VISION = VISION_KEYWORDS.some(v => modelName.includes(v));
 
