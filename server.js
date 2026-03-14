@@ -121,26 +121,53 @@ function flattenForOpenAI(messages, systemPrompt) {
 function flattenForAnthropic(messages) {
   const result = [];
   let lastRole = null;
-  for (const m of messages) {
+
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
     const role = m.role === "assistant" ? "assistant" : "user";
+    const isLast = i === messages.length - 1;
     let content = m.content;
+
     if (!content) continue;
-    if (typeof content === "string") {
-      content = content.trim();
-      if (!content) continue;
-    } else if (Array.isArray(content)) {
-      content = content.filter(b => {
-        if (!b || !b.type) return false;
-        if (b.type === "text") return typeof b.text === "string" && b.text.trim();
-        if (b.type === "image") return b.source && b.source.data;
-        return false;
-      });
-      if (content.length === 0) continue;
-      if (content.every(b => b.type === "text")) content = content.map(b => b.text).join("\n");
+
+    if (isLast && role === "user") {
+      // ✅ Último mensaje de usuario: puede tener imagen + texto como array
+      if (Array.isArray(content)) {
+        const blocks = content.filter(b => {
+          if (!b || !b.type) return false;
+          if (b.type === "text") return b.text?.trim();
+          if (b.type === "image") return b.source?.data;
+          return false;
+        });
+        if (blocks.length === 0) continue;
+        // Si solo hay texto, string. Si hay imagen, array.
+        content = blocks.every(b => b.type === "text")
+          ? blocks.map(b => b.text.trim()).join("\n")
+          : blocks;
+      } else if (typeof content === "string") {
+        content = content.trim();
+        if (!content) continue;
+      }
     } else {
-      content = String(content).trim();
-      if (!content) continue;
+      // ✅ Mensajes anteriores: SIEMPRE string (Anthropic no acepta arrays aquí)
+      if (typeof content === "string") {
+        content = content.trim();
+        if (!content) continue;
+      } else if (Array.isArray(content)) {
+        // Extraer solo texto, descartar imágenes
+        const text = content
+          .filter(b => b && b.type === "text" && b.text?.trim())
+          .map(b => b.text.trim())
+          .join("\n")
+          .trim();
+        if (!text) continue;
+        content = text;
+      } else {
+        content = String(content).trim();
+        if (!content) continue;
+      }
     }
+
     if (role === lastRole) {
       const prev = result[result.length - 1];
       const toStr = c => typeof c === "string" ? c : c.filter(b => b.type === "text").map(b => b.text).join("\n");
@@ -150,6 +177,7 @@ function flattenForAnthropic(messages) {
       lastRole = role;
     }
   }
+
   while (result.length > 0 && result[0].role !== "user") result.shift();
   if (result.length === 0) return null;
   return result;
