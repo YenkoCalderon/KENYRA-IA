@@ -28,10 +28,6 @@ const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-s
 const GEMINI_MODEL      = process.env.GEMINI_MODEL      || "gemini-2.0-flash";
 const OPENROUTER_MODEL  = process.env.OPENROUTER_MODEL  || "google/gemini-2.0-flash-exp:free";
 
-// ─── Modelo de visión para OpenRouter (cuando llega imagen) ───────────────
-// Si el modelo configurado es "auto" o uno sin visión, usa gemini-flash que sí tiene visión
-const OPENROUTER_VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || "google/gemini-2.0-flash-exp:free";
-
 function messageHasImage(messages) {
   if (!messages || messages.length === 0) return false;
   const last = messages[messages.length - 1];
@@ -39,20 +35,19 @@ function messageHasImage(messages) {
 }
 
 console.log("🔧 Variables de entorno detectadas:");
-console.log("   PORT                    :", process.env.PORT               || "❌ no definida");
-console.log("   AI_PROVIDER             :", process.env.AI_PROVIDER        || "❌ no definida");
-console.log("   OPENROUTER_API_KEY      :", process.env.OPENROUTER_API_KEY ? "✅ existe" : "❌ no definida");
-console.log("   OPENROUTER_MODEL        :", OPENROUTER_MODEL);
-console.log("   OPENROUTER_VISION_MODEL :", OPENROUTER_VISION_MODEL);
-console.log("   GEMINI_API_KEY          :", process.env.GEMINI_API_KEY     ? "✅ existe" : "❌ no definida");
-console.log("   GEMINI_MODEL            :", GEMINI_MODEL);
-console.log("   OPENAI_API_KEY          :", process.env.OPENAI_API_KEY     ? "✅ existe" : "❌ no definida");
-console.log("   OPENAI_MODEL            :", process.env.OPENAI_MODEL       || "gpt-4o (default)");
-console.log("   GROQ_API_KEY            :", process.env.GROQ_API_KEY       ? "✅ existe" : "❌ no definida");
-console.log("   GROQ_MODEL              :", GROQ_TEXT_MODEL);
-console.log("   GROQ_VISION_MODEL       :", GROQ_VISION_MODEL);
-console.log("   ANTHROPIC_API_KEY       :", process.env.ANTHROPIC_API_KEY  ? "✅ existe" : "❌ no definida");
-console.log("   TAVILY_API_KEY          :", process.env.TAVILY_API_KEY     ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
+console.log("   PORT               :", process.env.PORT               || "❌ no definida");
+console.log("   AI_PROVIDER        :", process.env.AI_PROVIDER        || "❌ no definida");
+console.log("   OPENROUTER_API_KEY :", process.env.OPENROUTER_API_KEY ? "✅ existe" : "❌ no definida");
+console.log("   OPENROUTER_MODEL   :", OPENROUTER_MODEL);
+console.log("   GEMINI_API_KEY     :", process.env.GEMINI_API_KEY     ? "✅ existe" : "❌ no definida");
+console.log("   GEMINI_MODEL       :", GEMINI_MODEL);
+console.log("   OPENAI_API_KEY     :", process.env.OPENAI_API_KEY     ? "✅ existe" : "❌ no definida");
+console.log("   OPENAI_MODEL       :", process.env.OPENAI_MODEL       || "gpt-4o (default)");
+console.log("   GROQ_API_KEY       :", process.env.GROQ_API_KEY       ? "✅ existe" : "❌ no definida");
+console.log("   GROQ_MODEL         :", GROQ_TEXT_MODEL);
+console.log("   GROQ_VISION_MODEL  :", GROQ_VISION_MODEL);
+console.log("   ANTHROPIC_API_KEY  :", process.env.ANTHROPIC_API_KEY  ? "✅ existe" : "❌ no definida");
+console.log("   TAVILY_API_KEY     :", process.env.TAVILY_API_KEY     ? `✅ existe (${process.env.TAVILY_API_KEY.slice(0,8)}...)` : "❌ no definida");
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -90,7 +85,6 @@ function toOpenAIContent(content, stripImages = false) {
           const src = block.source || {};
           if (src.type === "base64" && src.data) {
             const mime = src.media_type || "image/png";
-            // ✅ CORREGIDO: formato correcto image_url para OpenRouter/OpenAI
             parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${src.data}` } });
           } else if (src.type === "url" && src.url) {
             parts.push({ type: "image_url", image_url: { url: src.url } });
@@ -359,26 +353,13 @@ async function callAPI(payload) {
 
   // ── OPENROUTER ────────────────────────────────────────────────────────────
   if (PROVIDER === "openrouter") {
+    const model  = OPENROUTER_MODEL;
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("OPENROUTER_API_KEY no definida");
-
-    const hasImage = messageHasImage(rawMessages);
-
-    // ✅ CORRECCIÓN PRINCIPAL:
-    // Si hay imagen, forzamos un modelo con visión garantizada.
-    // "openrouter/auto" puede elegir un modelo sin visión y devolver respuesta vacía.
-    const model = hasImage ? OPENROUTER_VISION_MODEL : OPENROUTER_MODEL;
-
+    // OpenRouter acepta el mismo formato que OpenAI con visión
     const msgs = flattenForOpenAI(rawMessages, systemPrompt, true);
     if (!msgs) throw new Error("No hay mensajes válidos.");
-
-    body = JSON.stringify({
-      model,
-      messages: msgs,
-      max_tokens: 4000,
-      temperature: 0.3,
-    });
-
+    body     = JSON.stringify({ model, messages: msgs, max_tokens: 4000, temperature: 0.3 });
     hostname = "openrouter.ai";
     urlPath  = "/api/v1/chat/completions";
     headers  = {
@@ -388,7 +369,7 @@ async function callAPI(payload) {
       "X-Title":        "Kenyra IA",
       "Content-Length": Buffer.byteLength(body),
     };
-    console.log(`\n→ OPENROUTER [${model}] imagen:${hasImage} msgs:${msgs.length} body:${body.length}b`);
+    console.log(`\n→ OPENROUTER [${model}] msgs:${msgs.length} body:${body.length}b`);
 
   // ── GEMINI ────────────────────────────────────────────────────────────────
   } else if (PROVIDER === "gemini") {
@@ -564,8 +545,8 @@ server.listen(PORT, () => {
   console.log(`║  Puerto:    ${PORT}                                   ║`);
   console.log(`║  Provider:  ${PROVIDER.toUpperCase().padEnd(37)}║`);
   if (PROVIDER === "openrouter") {
-    console.log(`║  Texto:     ${OPENROUTER_MODEL.slice(0,37).padEnd(37)}║`);
-    console.log(`║  Visión:    ${OPENROUTER_VISION_MODEL.slice(0,37).padEnd(37)}║`);
+    console.log(`║  Modelo:    ${OPENROUTER_MODEL.slice(0,37).padEnd(37)}║`);
+    console.log(`║  Vision:    ✅ nativa (OpenRouter)               ║`);
   } else if (PROVIDER === "gemini") {
     console.log(`║  Modelo:    ${GEMINI_MODEL.padEnd(37)}║`);
     console.log(`║  Vision:    ✅ nativa (Gemini)                   ║`);
